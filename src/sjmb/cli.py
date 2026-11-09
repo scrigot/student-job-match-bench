@@ -132,7 +132,11 @@ def kappa_main(argv: list[str] | None = None) -> None:
     profiles = {p.id: p for p in generate_profiles(args.profiles, args.seed, args.as_of)}
     judge = make_judge(args.judge, args.as_of, args.max_judge_calls)
     human, model, strata = [], [], []
-    for row in read_golden(args.golden):
+    invalid: list[str] = []
+    graded = read_golden(args.golden, invalid)
+    for msg in invalid:
+        _log(f"skip {msg}")
+    for row in graded:
         prof, post = profiles.get(row["profile_id"]), postings.get(row["posting_id"])
         if prof is None or post is None:
             _log(f"skip unknown pair {row['profile_id']}/{row['posting_id']}")

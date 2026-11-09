@@ -43,11 +43,13 @@ def cohen_kappa(
     return float(1 - (w * observed).sum() / denom)
 
 
-def read_golden(path: Path) -> list[dict]:
+def read_golden(path: Path, invalid: list[str] | None = None) -> list[dict]:
     """Golden set CSV with profile_id, posting_id and a 0-4 grade in `grade` or `your_grade`.
 
     Lines whose first cell starts with `#` are comments (the rubric header), also when a
     spreadsheet re-exports them quoted. Rows with a blank grade are not graded yet and skipped.
+    A grade that is not one whole number 0-4 (e.g. "3/2") is never guessed: the row is skipped
+    and described in `invalid` when a list is passed, otherwise it raises.
     """
     lines = [ln for ln in path.read_text().splitlines() if not ln.lstrip('"').startswith("#")]
     rows = []
@@ -55,8 +57,12 @@ def read_golden(path: Path) -> list[dict]:
         raw = (r.get("grade") or r.get("your_grade") or "").strip()
         if not raw:
             continue
-        grade = int(float(raw))
-        if not 0 <= grade <= 4:
-            raise ValueError(f"grade must be 0-4, got {raw!r} for {r.get('profile_id')}")
-        rows.append({**r, "grade": grade})
+        if raw not in {"0", "1", "2", "3", "4"}:
+            where = f"pair {r['pair_no']}" if r.get("pair_no") else r.get("profile_id")
+            msg = f"{where}: grade must be one whole number 0-4, got {raw!r}"
+            if invalid is None:
+                raise ValueError(msg)
+            invalid.append(msg)
+            continue
+        rows.append({**r, "grade": int(raw)})
     return rows

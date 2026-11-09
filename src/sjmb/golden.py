@@ -140,6 +140,13 @@ def job_summary(p: Posting, excerpt_chars: int = 240) -> str:
     )
 
 
+def _cell(value: object) -> object:
+    """Keep spreadsheet apps from running posting text as a formula (CSV injection)."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 def write_sheet(pairs: list[dict], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     buf = io.StringIO()
@@ -154,8 +161,8 @@ def write_sheet(pairs: list[dict], path: Path) -> None:
                 i,
                 r["profile"].id,
                 r["posting"].id,
-                student_summary(r["profile"]),
-                job_summary(r["posting"]),
+                _cell(student_summary(r["profile"])),
+                _cell(job_summary(r["posting"])),
                 "",
                 "",
             ]

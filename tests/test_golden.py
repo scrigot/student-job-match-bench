@@ -1,6 +1,7 @@
 import csv
 import zlib
 
+import pytest
 from conftest import AS_OF
 
 from sjmb.data import load_fixture
@@ -8,6 +9,7 @@ from sjmb.golden import (
     COLUMNS,
     FILTER_OK_JUDGE_ZERO,
     FILTER_OUT_JUDGE_OK,
+    _cell,
     agreement_report,
     sample_pairs,
     write_sheet,
@@ -74,3 +76,23 @@ def test_agreement_report_sections():
     assert "cohen kappa (quadratic)" in out and "human \\ judge" in out
     assert "human sides with the filter: 1/1" in out  # human 0 where the filter excluded
     assert f"## Filter-judge disagreement: {FILTER_OK_JUDGE_ZERO}" in out
+
+
+def test_ambiguous_grades_are_reported_not_guessed(tmp_path):
+    path = tmp_path / "sheet.csv"
+    path.write_text(
+        "# rubric\npair_no,profile_id,posting_id,student,job,your_grade,notes\n"
+        "1,p000,x,s,j,3,\n2,p001,y,s,j,3/2,between 3 and 2\n3,p002,z,s,j,5,\n4,p003,w,s,j,,\n"
+    )
+    invalid = []
+    rows = read_golden(path, invalid)
+    assert [r["grade"] for r in rows] == [3]
+    assert len(invalid) == 2 and invalid[0].startswith("pair 2") and "3/2" in invalid[0]
+    with pytest.raises(ValueError):
+        read_golden(path)
+
+
+def test_formula_like_cells_are_neutralized():
+    assert _cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
+    assert _cell("@SUM") == "'@SUM" and _cell("-1+2") == "'-1+2"
+    assert _cell("Jane Street | Quant") == "Jane Street | Quant" and _cell(3) == 3
