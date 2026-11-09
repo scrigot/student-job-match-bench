@@ -28,13 +28,18 @@ def test_parse_judgment_variants():
     assert parse_judgment('{"grade": 3, "reason": "ok"}').grade == 3
     assert parse_judgment('```json\n{"grade": 0, "reason": "closed"}\n```').grade == 0
     assert parse_judgment('Sure. "grade": 2 because...').grade == 2
+    # v4 format: the grade comes from the disqualifier and fit fields, not the model.
+    assert parse_judgment('{"disqualifier": "a", "fit": 4, "reason": "intern vs FT"}').grade == 0
+    assert parse_judgment('{"disqualifier": "none", "fit": 1, "reason": "off track"}').grade == 1
+    assert parse_judgment('{"disqualifier": "None", "fit": 3, "reason": "ok"}').grade == 3
+    assert parse_judgment('{"disqualifier": "d) no sponsor", "fit": 3, "reason": "x"}').grade == 0
     with pytest.raises(ValueError):
         parse_judgment("no idea")
 
 
 def test_prompt_contains_rubric_and_fields(as_of):
     p = render_prompt(make_profile(), make_posting(title="Quant Intern", grad_years=[2028]), as_of)
-    assert "0 Unusable" in p and "Quant Intern" in p and "graduation year: 2028" in p
+    assert "STEP 1 - ELIGIBILITY" in p and "Quant Intern" in p and "graduation year: 2028" in p
     assert "TODAY: 2026-11-09" in p and "extracted eligible graduation years: 2028" in p
 
 

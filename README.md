@@ -82,7 +82,7 @@ Judge: _ · κ (quadratic) vs. golden set: _ · profiles: _ · postings: _
 | | |
 |---|---|
 | **Postings** | Public Greenhouse boards (26 firms) and Lever boards (4 firms) across trading, asset management, banking, consulting and tech, plus the SimplifyJobs Summer 2027 internship and new-grad lists. Board tokens are in `src/sjmb/data/loaders.py`. |
-| **Sample fixture** | `src/sjmb/data/fixtures/sample_postings.json`: 230 postings (4 per board plus a track-stratified Simplify slice), descriptions trimmed to 1,200 characters. The only data in git. |
+| **Sample fixture** | `src/sjmb/data/fixtures/sample_postings.json`: 230 postings (4 per board plus a track-stratified Simplify slice), descriptions kept up to 4,000 characters so the judge reads the full posting. The only data in git. |
 | **Extraction** | Rule-based at ingest (`sjmb/data/extract.py`): track, internship vs new-grad vs experienced, eligible grad years, sponsorship, terms. Greenhouse supplies deadlines; Simplify supplies sponsorship and active status. |
 | **Profiles** | 200 synthetic students from a seeded generator, stratified over 7 tracks × 4 class years × 3 work-authorization statuses. No real people. |
 | **Eligibility policy** | Each student seeks one level: seniors are matched to new-grad roles, everyone else to internships. Unstated fields never exclude a student. `us_persons` (citizens or permanent residents) is separated from `citizens_only`. |

@@ -5,7 +5,13 @@ from sjmb.data.extract import (
     extract_sponsorship,
     strip_html,
 )
-from sjmb.data.loaders import load_fixture, parse_greenhouse, parse_lever, parse_simplify
+from sjmb.data.loaders import (
+    MAX_DESCRIPTION_CHARS,
+    load_fixture,
+    parse_greenhouse,
+    parse_lever,
+    parse_simplify,
+)
 
 
 def test_strip_html_handles_greenhouse_double_escape():
@@ -133,4 +139,4 @@ def test_fixture_is_small_and_mixed():
     assert 100 <= len(posts) <= 400
     assert {p.source for p in posts} == {"greenhouse", "lever", "simplify"}
     assert len({p.id for p in posts}) == len(posts)
-    assert all(len(p.description) <= 1200 for p in posts)
+    assert all(len(p.description) <= MAX_DESCRIPTION_CHARS for p in posts)

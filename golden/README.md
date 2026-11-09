@@ -68,3 +68,23 @@ judge is lenient on ineligible roles, or the filter drops jobs that really fit:
 
 The early cases are mostly seniors (seeking new-grad roles) matched to internships. The filter
 excludes these by policy; the judge often accepts them.
+
+## Judge versions against this golden set
+
+All 100 pairs graded by hand (2026-11-09). Judge deployment: `gpt-4.1-mini`.
+
+| Rubric | Change | Exact | κ unweighted | κ quadratic | Your 0s the judge also gives 0 | Your 1–3s the judge gives 0 |
+|---|---|---:|---:|---:|---:|---:|
+| v2 | Baseline: 2,500-char excerpt, rubric as above | 0.36 | 0.18 | 0.42 | 15 / 54 | 8 / 41 |
+| v3 | Explicit disqualifiers a–g taken from the golden notes, full posting text | 0.53 | 0.22 | 0.46 | 44 / 54 | 24 / 41 |
+| v4 | Code derives the grade from disqualifier + fit; a non-US location is fit, not eligibility | 0.55 | 0.26 | 0.48 | 43 / 52 | 23 / 40 |
+
+v4 scored 97 pairs: 3 replies could not be parsed and are cached as unparsable.
+
+**Where v4 still disagrees with the human grades.** In 23 pairs the judge gives 0 where the human grade is 1–3:
+- 14 times it cites "wrong level" (a) for what is really a track mismatch ("product design, not data track").
+- 7 times it cites work authorization (d) when the posting is only silent about sponsorship.
+
+Both break explicit rubric rules, so this looks like a limit of the model, not of the wording.
+
+**Caveat.** The v3 and v4 rules were written from these same 100 pairs, so their κ is optimistic. Report a final κ on a fresh, held-out set of pairs.

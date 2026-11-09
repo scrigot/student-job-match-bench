@@ -1,26 +1,49 @@
 """The written relevance policy both judges follow. Bump RUBRIC_VERSION whenever the text changes;
 it is part of the judgment cache key, so old grades are never reused under a new policy."""
 
-RUBRIC_VERSION = "v2"  # v2: adds today's date and extracted eligibility fields
+RUBRIC_VERSION = "v4"
+# v2: adds today's date and extracted eligibility fields.
+# v3: two-step grading with explicit disqualifiers, taken from the reasons in the human golden set
+#     (golden/grading_sheet.csv); full posting text instead of a truncated excerpt.
+# v4: the judge reports a disqualifier and a fit score separately and code derives the grade, so
+#     a track mismatch can no longer become 0; a non-US location is a fit issue, not a
+#     disqualifier, matching how the golden set grades it.
 
 RUBRIC = """\
-You grade how well one job posting fits one student. Return a single integer grade 0-4.
+You grade how well one job posting fits one student. Work in two steps.
 
-4 Excellent: the student is eligible, the role is in the student's target track and level
-  (internship vs new-grad), and most of the posting's core skills match the student's.
-3 Good: eligible, right track and level, but only partial skill overlap or a weaker location fit.
-2 Fair: eligible, but an adjacent track (e.g. data science for a quant student) or thin overlap.
-1 Poor: eligible on paper but a clear mismatch in track or skills. The student would not apply.
-0 Unusable: the student cannot or should not apply: the role is senior or experienced-only,
-  the wrong level (internship vs full-time), the posting excludes the student's graduation year,
-  requires work authorization the student lacks, or is closed or past its deadline.
+STEP 1 - ELIGIBILITY. The grade is 0 if ANY of these holds. Check each one against the full
+posting text, not only the extracted fields:
+  a. Wrong level. A student seeking an internship cannot take a full-time, new-grad, entry-level
+     or apprenticeship role. A student seeking new-grad (a full-time role after graduation) is
+     not looking for an internship or co-op, including internships that convert to full-time.
+  b. Graduation window. The posting limits who may apply by graduation date or class year
+     ("graduating Dec 2027 - Jun 2028", "within one year of the internship", "class of 2027")
+     and the student's graduation year is outside it.
+  c. Degree. The role requires a PhD, MD, JD or master's (or current enrollment in one). Every
+     student here is an undergraduate pursuing a bachelor's degree.
+  d. Work authorization. The posting explicitly requires citizenship, a security clearance or a
+     permit the student lacks, or explicitly says it does not sponsor and the student needs
+     sponsorship. Silence about sponsorship is NOT a disqualifier, and neither is a location
+     outside the United States: treat those as a weaker location fit in step 2.
+  e. Experience. The role requires years of professional experience (for example "3+ years").
+  f. Restricted program. The program is only for a group the student is not in: veterans or
+     military spouses, students of one named school, residents of one country.
+  g. Closed. The posting is inactive or past its deadline.
+Only these seven reasons disqualify. Track, skills, major and location are never disqualifiers.
+If none holds, the student is eligible. A field the posting does not state never disqualifies.
+
+STEP 2 - FIT. Always score fit 1-4, even when step 1 found a disqualifier:
+4 Excellent: target track and level, and most of the posting's core skills match the student's.
+3 Good: target track and level, but partial skill overlap or a weaker location fit.
+2 Fair: an adjacent track (e.g. data science for a quant student) or thin skill overlap.
+1 Poor: a clear track or skill mismatch. The student would not apply.
+
+The final grade is 0 when step 1 names a disqualifier, otherwise the fit score.
 
 Rules:
-- Judge only from the fields given. Do not guess facts the posting does not state.
-- "Extracted" fields were read from the full posting, which the description below may truncate.
-  Trust them unless the text clearly contradicts them.
-- Use the date given as today when checking deadlines and graduation years.
-- If eligibility is not stated, assume the student is eligible.
+- "Extracted" fields come from rules and can be wrong; the posting text wins when they disagree.
+- Use the date given as today for deadlines and graduation years.
 - Company prestige does not change the grade.
 """
 
@@ -31,6 +54,7 @@ TODAY: {as_of}
 STUDENT
 track: {track}
 seeking: {seeking}
+degree: bachelor's (undergraduate)
 graduation year: {grad_year} ({class_label})
 major: {major}
 skills: {skills}
@@ -49,7 +73,8 @@ extracted eligible graduation years: {grad_years}
 extracted work authorization: {sponsorship}
 description: {description}
 
-Reply with JSON only: {{"grade": <0-4>, "reason": "<one short sentence>"}}
+Reply with JSON only:
+{{"disqualifier": "<one letter a-g, or none>", "fit": <1-4>, "reason": "<one short sentence>"}}
 """
 
 POOR_MATCH_MAX = 1  # grades at or below this count as a poor match

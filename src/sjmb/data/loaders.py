@@ -238,12 +238,13 @@ SAMPLE_QUOTAS = {
 
 
 def build_sample(
-    posts: list[Posting], per_board: int = 4, seed: int = 7, desc_chars: int = 1200
+    posts: list[Posting], per_board: int = 4, seed: int = 7, desc_chars: int = MAX_DESCRIPTION_CHARS
 ) -> list[Posting]:
     """A small, mixed sample for the committed fixture.
 
     Keeps a few postings per board (student roles first) plus a track-stratified slice of
-    active Simplify rows, and trims descriptions so the fixture stays small.
+    active Simplify rows. Descriptions keep the same cap as the full cache, so the judge
+    reads the whole posting.
     """
     rng = random.Random(seed)
     by_board: dict[str, list[Posting]] = {}

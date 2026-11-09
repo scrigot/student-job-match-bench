@@ -172,7 +172,10 @@ def render_prompt(profile: Profile, posting: Posting, as_of: date) -> str:
             "unknown": "not stated",
         }[posting.sponsorship],
         track=profile.track,
-        seeking=profile.seeking,
+        seeking={
+            "internship": "an internship",
+            "new_grad": "a new-grad role (full-time, starting after graduation)",
+        }[profile.seeking],
         grad_year=profile.grad_year,
         class_label=profile.class_label,
         major=profile.major,
@@ -187,19 +190,28 @@ def render_prompt(profile: Profile, posting: Posting, as_of: date) -> str:
         posted_at=posting.posted_at or "unknown",
         deadline=posting.deadline or "not stated",
         active=posting.active,
-        description=posting.description[:2500],
+        description=posting.description[:4000],
     )
 
 
+DISQUALIFIERS = set("abcdefg")
 _GRADE = re.compile(r'"grade"\s*:\s*([0-4])')
 
 
 def parse_judgment(content: str) -> Judgment:
     try:
         data = json.loads(content.strip().removeprefix("```json").removesuffix("```").strip())
+        reason = str(data.get("reason", ""))[:300]
+        if "fit" in data:  # v4+: code, not the model, turns a disqualifier into a 0
+            fit = int(data["fit"])
+            dq = str(data.get("disqualifier") or "none").strip().lower()
+            if 1 <= fit <= 4:
+                if dq[:1] in DISQUALIFIERS and (len(dq) == 1 or not dq[1].isalpha()):
+                    return Judgment(0, f"[{dq[:1]}] {reason}")
+                return Judgment(fit, reason)
         grade = int(data["grade"])
         if 0 <= grade <= 4:
-            return Judgment(grade, str(data.get("reason", ""))[:300])
+            return Judgment(grade, reason)
     except (ValueError, KeyError, TypeError):
         pass
     m = _GRADE.search(content)
