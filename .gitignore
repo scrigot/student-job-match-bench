@@ -1,0 +1,21 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# data and outputs (raw caches live outside git; only the sample fixture is committed)
+data/raw/
+.cache/
+results/
+*.jsonl.gz
+.DS_Store

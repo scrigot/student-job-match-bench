@@ -1,0 +1,43 @@
+[project]
+name = "student-job-match-bench"
+version = "0.1.0"
+description = "Offline benchmark for ranking public job postings against synthetic student profiles: BM25, dense, hybrid RRF and an eligibility-filter ablation, graded by a validated LLM judge."
+readme = "README.md"
+authors = [{ name = "Sam Rigot" }]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "numpy>=1.26",
+    "openai>=1.60",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+# Local dense embeddings. Pulls torch, so it is opt-in: `uv sync --extra dense`.
+dense = ["sentence-transformers>=3.0"]
+
+[project.scripts]
+bench = "sjmb.cli:main"
+bench-fetch = "sjmb.cli:fetch_main"
+bench-kappa = "sjmb.cli:kappa_main"
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "sjmb"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["SIM905"]  # a split() word list reads better than 50 quoted words
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
