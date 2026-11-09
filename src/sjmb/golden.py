@@ -192,7 +192,7 @@ def agreement_report(human: list[int], model: list[int], strata: list[str | None
     def summary(h: list[int], m: list[int]) -> list[str]:
         exact = sum(a == b for a, b in zip(h, m, strict=True)) / len(h)
         out = [f"pairs: {len(h)}", f"exact agreement: {exact:.3f}"]
-        if len(set(h) | set(m)) > 1:
+        if len(set(h)) > 1 and len(set(m)) > 1:  # kappa is undefined if a rater is constant
             out += [
                 f"cohen kappa (unweighted): {cohen_kappa(h, m):.3f}",
                 f"cohen kappa (quadratic): {cohen_kappa(h, m, weights='quadratic'):.3f}",

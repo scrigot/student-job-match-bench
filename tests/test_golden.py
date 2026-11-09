@@ -76,6 +76,8 @@ def test_agreement_report_sections():
     assert "cohen kappa (quadratic)" in out and "human \\ judge" in out
     assert "human sides with the filter: 1/1" in out  # human 0 where the filter excluded
     assert f"## Filter-judge disagreement: {FILTER_OK_JUDGE_ZERO}" in out
+    subset = out.split(f"## Filter-judge disagreement: {FILTER_OUT_JUDGE_OK}")[1].split("##")[0]
+    assert "kappa" not in subset  # one judge label in a subset: kappa is not reported
 
 
 def test_ambiguous_grades_are_reported_not_guessed(tmp_path):
