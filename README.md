@@ -31,7 +31,8 @@ The Azure judge is the default backend; `--judge stub` exists for CI and tests.
 | `uv sync --extra dense` then `uv run bench --encoder st` | Dense rung with sentence-transformers (all-MiniLM-L6-v2). |
 | `uv run bench` | Grade with the Azure AI Foundry judge (default). See [docs/azure-setup.md](docs/azure-setup.md). |
 | `uv run bench --encoder azure` | Dense rung with Azure `text-embedding-3-small`. |
-| `uv run bench-kappa golden.csv` | Judge–human agreement (Cohen's κ) on a hand-graded golden set. |
+| `uv run bench-golden` | Sample judged pairs into a blind 100-pair grading sheet (`golden/grading_sheet.csv`). |
+| `uv run bench-kappa golden/grading_sheet.csv` | Judge–human agreement: exact, κ (unweighted and quadratic), confusion matrix, filter–judge disagreement breakdown. Cached judgments only. |
 
 ## The method ladder
 
@@ -97,9 +98,9 @@ Judge: _ · κ (quadratic) vs. golden set: _ · profiles: _ · postings: _
   only pay for new pairs. Before judging, the runner counts uncached calls, prints an estimated
   cost when there are more than 500, and stops before any call if the count exceeds
   `--max-judge-calls` (default 500).
-- **Validation**: `bench-kappa` reports exact agreement and unweighted and quadratic-weighted
-  Cohen's κ against a human golden set. Golden-set CSV columns: `profile_id,posting_id,grade`
-  (profile IDs come from the seeded generator, posting IDs from the fixture or cache).
+- **Validation**: a 100-pair blind golden set in [golden/](golden/README.md), stratified to
+  include filter–judge disagreements. `bench-kappa` reports exact agreement, unweighted and
+  quadratic-weighted Cohen's κ, a confusion matrix and the disagreement breakdown.
 
 ## Layout
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -18,8 +19,9 @@ from sjmb.data.loaders import (
     save_postings,
 )
 from sjmb.eval.runner import run_bench, to_markdown
-from sjmb.judge.agreement import cohen_kappa, read_golden
-from sjmb.judge.judges import make_judge
+from sjmb.golden import agreement_report, read_judgments, sample_pairs, stratum, write_sheet
+from sjmb.judge.agreement import read_golden
+from sjmb.judge.judges import BudgetExceeded, make_judge
 from sjmb.profiles import generate_profiles
 
 
@@ -109,8 +111,8 @@ def kappa_main(argv: list[str] | None = None) -> None:
     load_dotenv()
     ap = argparse.ArgumentParser(
         prog="bench-kappa",
-        description="Agreement between a judge and a human golden set "
-        "(CSV: profile_id,posting_id,grade).",
+        description="Agreement between the judge and a human golden set. Reads the sheet from "
+        "bench-golden as-is (grades in `your_grade`; `#` rubric lines are skipped).",
     )
     ap.add_argument("golden", type=Path)
     ap.add_argument("--judge", choices=["stub", "azure"], default="azure")
@@ -118,23 +120,72 @@ def kappa_main(argv: list[str] | None = None) -> None:
     ap.add_argument("--profiles", type=int, default=200)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--as-of", type=date.fromisoformat, default=date(2026, 11, 9))
+    ap.add_argument(
+        "--max-judge-calls",
+        type=int,
+        default=0,
+        help="uncached judge calls allowed (default 0: use cached judgments only)",
+    )
     args = ap.parse_args(argv)
 
     postings = {p.id: p for p in (load_fixture() if args.data == "sample" else load_cache())}
     profiles = {p.id: p for p in generate_profiles(args.profiles, args.seed, args.as_of)}
-    judge = make_judge(args.judge, args.as_of)
-    human, model = [], []
+    judge = make_judge(args.judge, args.as_of, args.max_judge_calls)
+    human, model, strata = [], [], []
     for row in read_golden(args.golden):
         prof, post = profiles.get(row["profile_id"]), postings.get(row["posting_id"])
         if prof is None or post is None:
             _log(f"skip unknown pair {row['profile_id']}/{row['posting_id']}")
             continue
+        try:
+            j = judge.grade(prof, post)
+        except BudgetExceeded:
+            raise SystemExit(
+                f"no cached judgment for {prof.id}/{post.id}; rerun with --max-judge-calls N "
+                "to allow new judge calls"
+            ) from None
+        if j.grade is None:
+            _log(f"skip {prof.id}/{post.id}: the judge reply was unparsable")
+            continue
         human.append(row["grade"])
-        model.append(judge.grade(prof, post).grade)
+        model.append(j.grade)
+        strata.append(stratum(prof, post, j.grade, args.as_of))
     if not human:
-        raise SystemExit("no usable rows in the golden set")
-    exact = sum(h == m for h, m in zip(human, model, strict=True)) / len(human)
-    print(f"pairs: {len(human)}")
-    print(f"exact agreement: {exact:.3f}")
-    print(f"cohen kappa (unweighted): {cohen_kappa(human, model):.3f}")
-    print(f"cohen kappa (quadratic): {cohen_kappa(human, model, weights='quadratic'):.3f}")
+        raise SystemExit("no graded rows yet: fill in your_grade (0-4) first")
+    print(f"judge: {judge.name}")
+    print(agreement_report(human, model, strata))
+
+
+def golden_main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(
+        prog="bench-golden",
+        description="Sample judged pairs into a blind human grading sheet.",
+    )
+    ap.add_argument("--judgments", type=Path, default=Path("results/judgments.jsonl"))
+    ap.add_argument("--out", type=Path, default=Path("golden/grading_sheet.csv"))
+    ap.add_argument("--n", type=int, default=100)
+    ap.add_argument("--sample-seed", type=int, default=7)
+    ap.add_argument("--data", choices=["sample", "cache"], default="sample")
+    ap.add_argument("--profiles", type=int, default=200)
+    ap.add_argument("--seed", type=int, default=42, help="profile generator seed")
+    ap.add_argument("--as-of", type=date.fromisoformat, default=date(2026, 11, 9))
+    args = ap.parse_args(argv)
+
+    postings = {p.id: p for p in (load_fixture() if args.data == "sample" else load_cache())}
+    profiles = {p.id: p for p in generate_profiles(args.profiles, args.seed, args.as_of)}
+    pairs = sample_pairs(
+        read_judgments(args.judgments),
+        profiles,
+        postings,
+        args.as_of,
+        n=args.n,
+        seed=args.sample_seed,
+    )
+    write_sheet(pairs, args.out)
+    strata = Counter(r["stratum"] or "filter and judge agree" for r in pairs)
+    bands = Counter(r["band"] for r in pairs)
+    cells = Counter(r["cell"] for r in pairs)
+    _log(f"wrote {len(pairs)} pairs to {args.out}")
+    _log(f"strata: {dict(strata)}")
+    _log(f"judge grade bands: {dict(sorted(bands.items()))}")
+    _log(f"track x class cells: {len(cells)}, largest {max(cells.values())}")

@@ -44,9 +44,19 @@ def cohen_kappa(
 
 
 def read_golden(path: Path) -> list[dict]:
-    """Golden set CSV: profile_id, posting_id, grade (0-4), optional note."""
-    with path.open() as f:
-        rows = list(csv.DictReader(f))
-    for r in rows:
-        r["grade"] = int(r["grade"])
+    """Golden set CSV with profile_id, posting_id and a 0-4 grade in `grade` or `your_grade`.
+
+    Lines whose first cell starts with `#` are comments (the rubric header), also when a
+    spreadsheet re-exports them quoted. Rows with a blank grade are not graded yet and skipped.
+    """
+    lines = [ln for ln in path.read_text().splitlines() if not ln.lstrip('"').startswith("#")]
+    rows = []
+    for r in csv.DictReader(lines):
+        raw = (r.get("grade") or r.get("your_grade") or "").strip()
+        if not raw:
+            continue
+        grade = int(float(raw))
+        if not 0 <= grade <= 4:
+            raise ValueError(f"grade must be 0-4, got {raw!r} for {r.get('profile_id')}")
+        rows.append({**r, "grade": grade})
     return rows
