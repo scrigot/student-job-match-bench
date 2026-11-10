@@ -43,6 +43,12 @@ def cohen_kappa(
     return float(1 - (w * observed).sum() / denom)
 
 
+def read_sheet_rows(path: Path) -> list[dict]:
+    """All rows of a grading sheet, graded or not, with `#` comment lines skipped."""
+    lines = [ln for ln in path.read_text().splitlines() if not ln.lstrip('"').startswith("#")]
+    return list(csv.DictReader(lines))
+
+
 def read_golden(path: Path, invalid: list[str] | None = None) -> list[dict]:
     """Golden set CSV with profile_id, posting_id and a 0-4 grade in `grade` or `your_grade`.
 
@@ -51,9 +57,8 @@ def read_golden(path: Path, invalid: list[str] | None = None) -> list[dict]:
     A grade that is not one whole number 0-4 (e.g. "3/2") is never guessed: the row is skipped
     and described in `invalid` when a list is passed, otherwise it raises.
     """
-    lines = [ln for ln in path.read_text().splitlines() if not ln.lstrip('"').startswith("#")]
     rows = []
-    for r in csv.DictReader(lines):
+    for r in read_sheet_rows(path):
         raw = (r.get("grade") or r.get("your_grade") or "").strip()
         if not raw:
             continue

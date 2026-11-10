@@ -20,8 +20,9 @@ from sjmb.data.loaders import (
 )
 from sjmb.eval.runner import run_bench, to_markdown
 from sjmb.golden import agreement_report, read_judgments, sample_pairs, stratum, write_sheet
-from sjmb.judge.agreement import read_golden
-from sjmb.judge.judges import BudgetExceeded, make_judge
+from sjmb.judge.agreement import read_golden, read_sheet_rows
+from sjmb.judge.judges import BudgetExceeded, make_judge, render_prompt
+from sjmb.judge.rubric import RUBRIC_VERSION
 from sjmb.profiles import generate_profiles
 
 
@@ -193,3 +194,42 @@ def golden_main(argv: list[str] | None = None) -> None:
     _log(f"strata: {dict(strata)}")
     _log(f"judge grade bands: {dict(sorted(bands.items()))}")
     _log(f"track x class cells: {len(cells)}, largest {max(cells.values())}")
+
+
+def judge_one_main(argv: list[str] | None = None) -> None:
+    """Show one golden pair the way the judge sees it, for prompt work in a playground."""
+    load_dotenv()
+    ap = argparse.ArgumentParser(
+        prog="bench-judge-one",
+        description="Write the exact judge prompt for one golden pair to a file, and show the "
+        "judge's cached answer next to your grade. Makes no call unless --call is given.",
+    )
+    ap.add_argument("pair_no", type=int)
+    ap.add_argument("--sheet", type=Path, default=Path("golden/grading_sheet.csv"))
+    ap.add_argument("--out-dir", type=Path, default=Path("results/prompts"))
+    ap.add_argument("--call", action="store_true", help="ask the judge if no cached answer")
+    ap.add_argument("--as-of", type=date.fromisoformat, default=date(2026, 11, 9))
+    args = ap.parse_args(argv)
+
+    rows = {int(r["pair_no"]): r for r in read_sheet_rows(args.sheet)}
+    if args.pair_no not in rows:
+        raise SystemExit(f"pair {args.pair_no} is not in {args.sheet}")
+    row = rows[args.pair_no]
+    prof = {p.id: p for p in generate_profiles(200, 42, args.as_of)}[row["profile_id"]]
+    post = {p.id: p for p in load_fixture()}[row["posting_id"]]
+    prompt = render_prompt(prof, post, args.as_of)
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    path = args.out_dir / f"pair_{args.pair_no}.txt"
+    path.write_text(prompt)
+
+    judge = make_judge("azure", args.as_of, max_calls=1 if args.call else 0)
+    if judge.is_cached(prof, post) or args.call:
+        j = judge.grade(prof, post)
+        answer = f"{j.grade}  ({j.reason})"
+    else:
+        answer = "not cached for this rubric version (rerun with --call)"
+    print(f"pair {args.pair_no}: {post.company} | {post.title}")
+    print(f"student:   {prof.class_label}, {prof.track} track, seeking {prof.seeking}")
+    print(f"your grade: {row.get('your_grade') or '-'}  {row.get('notes', '')[:160]}")
+    print(f"judge ({judge.name}, rubric {RUBRIC_VERSION}): {answer}")
+    print(f"prompt written to {path}  (copy it with: pbcopy < {path})")

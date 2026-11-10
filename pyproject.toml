@@ -21,6 +21,7 @@ bench = "sjmb.cli:main"
 bench-fetch = "sjmb.cli:fetch_main"
 bench-kappa = "sjmb.cli:kappa_main"
 bench-golden = "sjmb.cli:golden_main"
+bench-judge-one = "sjmb.cli:judge_one_main"
 
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.6"]
