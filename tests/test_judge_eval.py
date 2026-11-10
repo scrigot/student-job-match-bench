@@ -33,6 +33,12 @@ def test_parse_judgment_variants():
     assert parse_judgment('{"disqualifier": "none", "fit": 1, "reason": "off track"}').grade == 1
     assert parse_judgment('{"disqualifier": "None", "fit": 3, "reason": "ok"}').grade == 3
     assert parse_judgment('{"disqualifier": "d) no sponsor", "fit": 3, "reason": "x"}').grade == 0
+    # Seen live: a disqualified reply with fit 0 must still parse, as a 0.
+    assert (
+        parse_judgment('{"checks": "c: PhD", "disqualifier": "c", "fit": 0, "reason": "PhD"}').grade
+        == 0
+    )
+    assert parse_judgment('{"disqualifier": "none", "fit": 0, "reason": "odd"}').grade == 1
     with pytest.raises(ValueError):
         parse_judgment("no idea")
 

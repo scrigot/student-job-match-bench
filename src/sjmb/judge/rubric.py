@@ -1,22 +1,25 @@
 """The written relevance policy both judges follow. Bump RUBRIC_VERSION whenever the text changes;
 it is part of the judgment cache key, so old grades are never reused under a new policy."""
 
-RUBRIC_VERSION = "v4"
+RUBRIC_VERSION = "v5"
 # v2: adds today's date and extracted eligibility fields.
 # v3: two-step grading with explicit disqualifiers, taken from the reasons in the human golden set
 #     (golden/grading_sheet.csv); full posting text instead of a truncated excerpt.
 # v4: the judge reports a disqualifier and a fit score separately and code derives the grade, so
 #     a track mismatch can no longer become 0; a non-US location is a fit issue, not a
 #     disqualifier, matching how the golden set grades it.
+# v5: (found by hand in the Foundry playground) rule a names the career stage only, one made-up
+#     worked example, and the reply lists a check per rule before it picks the disqualifier.
 
 RUBRIC = """\
 You grade how well one job posting fits one student. Work in two steps.
 
 STEP 1 - ELIGIBILITY. The grade is 0 if ANY of these holds. Check each one against the full
 posting text, not only the extracted fields:
-  a. Wrong level. A student seeking an internship cannot take a full-time, new-grad, entry-level
-     or apprenticeship role. A student seeking new-grad (a full-time role after graduation) is
-     not looking for an internship or co-op, including internships that convert to full-time.
+  a. Wrong career stage (ONLY internship vs full-time). This is never about the field or
+     track. A student seeking an internship cannot take a full-time, new-grad, entry-level
+     or apprenticeship role. A student seeking new-grad (a full-time role after graduation)
+     is not looking for an internship or co-op, including internships that convert.
   b. Graduation window. The posting limits who may apply by graduation date or class year
      ("graduating Dec 2027 - Jun 2028", "within one year of the internship", "class of 2027")
      and the student's graduation year is outside it.
@@ -73,8 +76,17 @@ extracted eligible graduation years: {grad_years}
 extracted work authorization: {sponsorship}
 description: {description}
 
-Reply with JSON only:
-{{"disqualifier": "<one letter a-g, or none>", "fit": <1-4>, "reason": "<one short sentence>"}}
+Example (made up, not one of the graded pairs): a data-track student seeking an internship;
+the posting is a Graphic Design Intern. Same career stage, different field, so it is eligible:
+{{"checks": "a: both internship, ok; b: no window; c: bachelor's ok; d: nothing stated; \
+e: none; f: none; g: open", "disqualifier": "none", "fit": 1, \
+"reason": "Eligible, but design is off-track for a data student."}}
+
+Reply with JSON only, in this order. Fill "checks" first, one short phrase per rule, and
+only then choose the disqualifier from your checks:
+{{"checks": "a: ... b: ... c: ... d: ... e: ... f: ... g: ...", \
+"disqualifier": "<one letter a-g whose check failed, or none>", "fit": <1-4>, \
+"reason": "<one short sentence>"}}
 """
 
 POOR_MATCH_MAX = 1  # grades at or below this count as a poor match

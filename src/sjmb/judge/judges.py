@@ -95,7 +95,15 @@ class AzureJudge:
         if self.cache_path.exists():
             for line in self.cache_path.read_text().splitlines():
                 row = json.loads(line)
-                self.cache[row["key"]] = Judgment(row["grade"], row.get("reason", ""), True)
+                grade, reason = row["grade"], row.get("reason", "")
+                if grade is None and row.get("raw"):
+                    # A failed parse keeps the raw reply, so parser fixes apply for free.
+                    try:
+                        parsed = parse_judgment(row["raw"])
+                        grade, reason = parsed.grade, parsed.reason
+                    except ValueError:
+                        pass
+                self.cache[row["key"]] = Judgment(grade, reason, True)
         self.llm = llm or azure.client()
 
     def _key(self, profile: Profile, posting: Posting) -> str:
@@ -126,6 +134,7 @@ class AzureJudge:
             raise BudgetExceeded(f"judge budget of {self.max_calls} uncached calls reached")
         prompt = render_prompt(profile, posting, self.as_of)
         j = None
+        raw = ""
         for max_tokens in (400, 1500):  # reasoning deployments can spend the first budget
             resp = self.llm.chat.completions.create(
                 model=self.deployment,
@@ -133,8 +142,9 @@ class AzureJudge:
                 max_completion_tokens=max_tokens,
             )
             self.calls += 1
+            raw = resp.choices[0].message.content or ""
             try:
-                j = parse_judgment(resp.choices[0].message.content or "")
+                j = parse_judgment(raw)
                 break
             except ValueError:
                 continue
@@ -148,6 +158,8 @@ class AzureJudge:
             "profile": profile.id,
             "posting": posting.id,
         }
+        if j.grade is None:
+            row["raw"] = raw[:4000]
         with self.cache_path.open("a") as f:
             f.write(json.dumps(row) + "\n")
         self.cache[key] = j
@@ -205,10 +217,11 @@ def parse_judgment(content: str) -> Judgment:
         if "fit" in data:  # v4+: code, not the model, turns a disqualifier into a 0
             fit = int(data["fit"])
             dq = str(data.get("disqualifier") or "none").strip().lower()
-            if 1 <= fit <= 4:
-                if dq[:1] in DISQUALIFIERS and (len(dq) == 1 or not dq[1].isalpha()):
-                    return Judgment(0, f"[{dq[:1]}] {reason}")
-                return Judgment(fit, reason)
+            if dq[:1] in DISQUALIFIERS and (len(dq) == 1 or not dq[1].isalpha()):
+                return Judgment(0, f"[{dq[:1]}] {reason}")  # any fit, even 0
+            if 0 <= fit <= 4:
+                # No disqualifier means eligible, so the grade is at least 1.
+                return Judgment(max(fit, 1), reason)
         grade = int(data["grade"])
         if 0 <= grade <= 4:
             return Judgment(grade, reason)
