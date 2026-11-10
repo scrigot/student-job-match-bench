@@ -126,3 +126,23 @@ uv run bench-kappa golden/heldout_sheet.csv
 
 The judge's answers for these 50 are already cached, so scoring costs nothing. Grade the sheet
 the same way: one whole number 0–4 per row, `notes` optional, saved as CSV.
+
+### Held-out result (graded 2026-11-09)
+
+| Judge | Pairs | Exact | κ unweighted | κ quadratic |
+|---|---:|---:|---:|---:|
+| Original v2 judge (no tuning) | 50 | 0.44 | 0.27 | 0.45 |
+| **Final judge (v5 + code checks + page text)** | 50 | **0.58** | **0.41** | **0.65** |
+| Final judge, on the 100 pairs it was tuned on | 100 | 0.80 | 0.69 | 0.85 |
+
+The held-out gain is real but smaller than on the tuning set. The gap (0.80 vs 0.58 exact) is
+how much of the tuning-set score came from fitting those 100 pairs. With 50 pairs, the held-out
+κ is uncertain by roughly ±0.1.
+
+Remaining held-out errors:
+- 6 human 1s graded 2 (adjacent vs mismatch).
+- 5 human 2s graded 3–4 (fit too generous).
+- 6 human 0s graded 1–2 (missed disqualifiers).
+
+Where the filter allows a posting but the judge gives 0, the human sided with the judge 6 of 7
+times. The judge catches eligibility rules the extractor misses.
