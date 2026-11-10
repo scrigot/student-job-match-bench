@@ -104,13 +104,17 @@ _MONTHS = (
 )
 _YEAR = rf"(?:{_MONTHS}\s+)?(20[2-3]\d)"
 _GRAD_TRIGGER = re.compile(
-    r"class of|graduat(?:e|es|ing|ion)\b|grad(?:uation)? date|expected to graduate", re.I
+    r"class of|graduat(?:e|es|ing|ion)\b|grad(?:uation)? date|expected to graduate|"
+    r"degree expected",
+    re.I,
 )
 _YEAR_LIST = re.compile(
     rf"\D{{0,40}}?{_YEAR}((?:\s*(?:,|-|–|to|and|or|through)\s*(?:or\s+|and\s+)?{_YEAR})*)",
     re.I,
 )
 _YEAR_ANY = re.compile(r"20[2-3]\d")
+# "Targeting a 2028 full-time start": graduating in the fall before or the spring of that year.
+_FT_START = re.compile(r"\b(20[2-3]\d)\s+full[- ]time start", re.I)
 _RANGE_WORD = re.compile(r"\b(between|from)\b|-|–|\bto\b|\bthrough\b", re.I)
 MIN_GRAD_YEAR = 2025  # older years in a posting are founding dates, not eligibility
 OPEN_SPAN = 4  # "2027 or later" / "by 2028" cover this many years past / before the bound
@@ -188,6 +192,9 @@ def extract_grad_years(text: str) -> list[int]:
                 years.update(range(lo, hi + 1))
         else:
             years.update(found)
+    for m in _FT_START.finditer(text):
+        y = int(m.group(1))
+        years.update((y - 1, y))
     return sorted(years)
 
 

@@ -57,7 +57,7 @@ SIMPLIFY_LISTS = {
 }
 
 USER_AGENT = "student-job-match-bench/0.1 (research benchmark)"
-MAX_DESCRIPTION_CHARS = 4000
+MAX_DESCRIPTION_CHARS = 8000  # eligibility rules often sit at the end
 
 
 def cache_dir() -> Path:

@@ -274,7 +274,7 @@ def render_prompt(profile: Profile, posting: Posting, as_of: date) -> str:
         posted_at=posting.posted_at or "unknown",
         deadline=posting.deadline or "not stated",
         active=posting.active,
-        description=posting.description[:4000],
+        description=posting.description[:8000],
     )
 
 
