@@ -127,3 +127,29 @@ def test_location_match_and_fit_cap():
     assert apply_fit_caps(ny, far, Judgment(4, "great")).grade == 3
     assert apply_fit_caps(ny, far, Judgment(2, "ok")).grade == 2  # only 4s are capped
     assert apply_fit_caps(ny, make_posting(location="NYC"), Judgment(4, "great")).grade == 4
+
+
+def test_off_track_caps_at_two():
+    from sjmb.judge.judges import Judgment, apply_fit_caps
+
+    quant = make_profile(track="quant", locations=["Chicago, IL"])
+    assert (
+        apply_fit_caps(quant, make_posting(track="swe", location="Chicago"), Judgment(4, "")).grade
+        == 2
+    )
+    assert (
+        apply_fit_caps(
+            quant, make_posting(track="quant", location="Chicago"), Judgment(4, "")
+        ).grade
+        == 4
+    )
+    assert (
+        apply_fit_caps(
+            quant, make_posting(track="other", location="Chicago"), Judgment(4, "")
+        ).grade
+        == 4
+    )
+    assert (
+        apply_fit_caps(quant, make_posting(track="swe", location="Chicago"), Judgment(1, "")).grade
+        == 1
+    )

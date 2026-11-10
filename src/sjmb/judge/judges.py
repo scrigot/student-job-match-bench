@@ -125,8 +125,18 @@ def location_match(profile: Profile, posting: Posting) -> bool | None:
 
 
 def apply_fit_caps(profile: Profile, posting: Posting, j: Judgment) -> Judgment:
-    """Grading policy from the golden set: a 4 needs one of the student's preferred locations.
-    Every human 4 has one; 8 of 10 human 3s are right-track roles in other cities."""
+    """Rubric rules that code enforces on the judge's fit grade:
+    - 3 and 4 require the student's target track, so another track caps at 2. The track is
+      the extractor's (posting.track); "other" means the extractor found no track, so no cap.
+    - a 4 needs one of the student's preferred locations (golden set: every human 4 has one,
+      and 8 of 10 human 3s are right-track roles in other cities).
+    """
+    if j.grade is None or j.grade == 0:
+        return j
+    if j.grade > 2 and posting.track not in ("other", profile.track):
+        return Judgment(
+            2, f"[capped: {posting.track} is not the {profile.track} track] {j.reason}", j.cached
+        )
     if j.grade == 4 and location_match(profile, posting) is False:
         return Judgment(3, f"[capped: not a preferred location] {j.reason}", j.cached)
     return j
