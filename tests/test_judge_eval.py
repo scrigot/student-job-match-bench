@@ -103,3 +103,12 @@ def test_bench_end_to_end_on_sample(tmp_path, as_of):
         run_bench(posts, profiles[:1], StubJudge(as_of), as_of, encoder="lsa", pool_depth=5)
     with pytest.raises(ValueError):
         run_bench(posts, profiles[:1], StubJudge(as_of), as_of, encoder="lsa", pool_depth=60)
+
+
+def test_hard_check_grad_window():
+    from sjmb.judge.judges import hard_check
+
+    student = make_profile(grad_year=2029)
+    assert hard_check(student, make_posting(grad_years=[2028])) is not None  # outside window
+    assert hard_check(student, make_posting(grad_years=[2028, 2029])) is None  # inside window
+    assert hard_check(student, make_posting(grad_years=[])) is None  # not stated: never disqualify

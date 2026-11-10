@@ -56,6 +56,9 @@ def test_grad_year_ranges_with_seasons():
     assert extract_grad_years("graduating between December 2026 and August 2027") == [2026, 2027]
     assert extract_grad_years("Bachelor's degree required. Founded in 2021, we are") == []
     assert extract_grad_years("Class of 2027-2029") == [2027, 2028, 2029]
+    # Open-ended windows (golden pairs 15, 23, 88): a bound, not a single year.
+    assert extract_grad_years("graduating in Fall 2027 or later") == [2027, 2028, 2029, 2030, 2031]
+    assert extract_grad_years("Must graduate by August 2028") == [2024, 2025, 2026, 2027, 2028]
 
 
 def test_sponsorship():

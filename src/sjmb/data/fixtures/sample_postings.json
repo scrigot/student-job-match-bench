@@ -153,6 +153,10 @@
   "track": "quant",
   "role_type": "internship",
   "grad_years": [
+   2024,
+   2025,
+   2026,
+   2027,
    2028
   ],
   "sponsorship": "unknown",
@@ -174,6 +178,10 @@
   "track": "quant",
   "role_type": "internship",
   "grad_years": [
+   2024,
+   2025,
+   2026,
+   2027,
    2028
   ],
   "sponsorship": "unknown",
@@ -195,6 +203,10 @@
   "track": "swe",
   "role_type": "internship",
   "grad_years": [
+   2024,
+   2025,
+   2026,
+   2027,
    2028
   ],
   "sponsorship": "unknown",
@@ -1454,7 +1466,11 @@
   "track": "swe",
   "role_type": "internship",
   "grad_years": [
-   2027
+   2027,
+   2028,
+   2029,
+   2030,
+   2031
   ],
   "sponsorship": "unknown",
   "terms": [
@@ -1476,7 +1492,11 @@
   "track": "swe",
   "role_type": "internship",
   "grad_years": [
-   2027
+   2027,
+   2028,
+   2029,
+   2030,
+   2031
   ],
   "sponsorship": "unknown",
   "terms": [

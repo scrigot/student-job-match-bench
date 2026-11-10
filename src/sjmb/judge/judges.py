@@ -74,6 +74,28 @@ class StubJudge:
         return Judgment(1, f"off track {posting.track}")
 
 
+def hard_check(profile: Profile, posting: Posting) -> str | None:
+    """Eligibility facts that code checks better than the LLM. Runs before any judge call.
+
+    Return a short reason (e.g. "grad year 2029 not in posting window [2028]") when the student
+    is clearly ineligible, or None to let the LLM judge the pair.
+
+    The posting fields come from the extractor (sjmb/data/extract.py):
+      posting.grad_years  -> list[int], e.g. [2027, 2028]; empty list means "not stated"
+      posting.role_type   -> "internship" | "new_grad" | "experienced" | "unknown"
+      posting.sponsorship -> "offers" | "no" | "us_persons" | "citizens_only" | "unknown"
+    The student fields: profile.grad_year (int), profile.seeking ("internship" | "new_grad"),
+      profile.work_auth ("citizen" | "permanent_resident" | "needs_sponsorship").
+
+    Rule of thumb from the golden set: a field the posting does not state never disqualifies.
+    """
+    # Graduation window: only when the posting states one (empty list = not stated).
+    if posting.grad_years and profile.grad_year not in posting.grad_years:
+        window = ", ".join(str(y) for y in posting.grad_years)
+        return f"grad year {profile.grad_year} not in posting window [{window}]"
+    return None
+
+
 class AzureJudge:
     """Chat completions on an Azure AI Foundry deployment through the OpenAI v1 route, with
     `model` set to the deployment name.
@@ -127,6 +149,10 @@ class AzureJudge:
         return azure.estimate_cost(self.deployment, tokens, self.OUTPUT_TOKENS * len(pairs))
 
     def grade(self, profile: Profile, posting: Posting) -> Judgment:
+        # Code checks first: they override any cached LLM answer and cost nothing.
+        reason = hard_check(profile, posting)
+        if reason is not None:
+            return Judgment(0, f"[code] {reason}")
         key = self._key(profile, posting)
         if key in self.cache:
             return self.cache[key]

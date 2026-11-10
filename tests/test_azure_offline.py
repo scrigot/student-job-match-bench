@@ -118,3 +118,10 @@ def test_cache_key_includes_as_of(azure_env):
     j.grade(make_profile(), make_posting())
     later = AzureJudge(date(2027, 1, 1), max_calls=10, llm=FakeLLM())
     assert not later.is_cached(make_profile(), make_posting())
+
+
+def test_hard_check_runs_before_the_cache(azure_env):
+    llm = FakeLLM()  # always answers grade 3
+    j = AzureJudge(AS_OF, max_calls=10, llm=llm)
+    prof, post = make_profile(grad_year=2029), make_posting(grad_years=[2028])
+    assert j.grade(prof, post).grade == 0 and llm.chat_calls == 0  # code decided, no call

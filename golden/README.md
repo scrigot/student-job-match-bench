@@ -78,7 +78,8 @@ All 100 pairs graded by hand (2026-11-09). Judge deployment: `gpt-4.1-mini`.
 | v2 | Baseline: 2,500-char excerpt, rubric as above | 0.36 | 0.18 | 0.42 | 15 / 54 | 8 / 41 |
 | v3 | Explicit disqualifiers a–g taken from the golden notes, full posting text | 0.53 | 0.22 | 0.46 | 44 / 54 | 24 / 41 |
 | v4 | Code derives the grade from disqualifier + fit; a non-US location is fit, not eligibility | 0.55 | 0.26 | 0.48 | 43 / 52 | 23 / 40 |
-| v5 | Found by hand in the Foundry playground: rule (a) is career stage only, one made-up example, the reply lists a check per rule before it picks a disqualifier | **0.60** | **0.45** | **0.55** | 39 / 54 | **2 / 41** |
+| v5 | Found by hand in the Foundry playground: rule (a) is career stage only, one made-up example, the reply lists a check per rule before it picks a disqualifier | 0.60 | 0.45 | 0.55 | 39 / 54 | 2 / 41 |
+| v5 + code check | Graduation windows checked in code before any LLM call (`hard_check`); the extractor reads "2027 or later" and "by 2028" as open windows | **0.61** | **0.46** | **0.58** | **40 / 54** | **1 / 41** |
 
 v4 scored 97 pairs: 3 replies could not be parsed and are cached as unparsable. v5 scored all 100.
 Its first run lost 27 replies to a parser bug: the parser rejected `"fit": 0` on disqualified pairs.
@@ -93,5 +94,10 @@ The bug is fixed, and failed replies now keep their raw text so they can be re-p
   - 1 citizenship plus clearance requirement.
   - 1 experienced-only role.
 - **Grades fit one step high:** 9 of the 10 human 3s get a 4.
+
+**Why the code check.** The judge saw "must graduate by August 2028" next to "graduation year:
+2029" and still got pair 15 right only 2 times in 6 at default temperature, and 0 in 6 at
+temperature 0. Comparing years is arithmetic, so code does it. The LLM reads text and judges fit.
+The code check fires on 5 golden pairs and agrees with the human grade on all 5.
 
 **Caveat.** The v3 and v4 rules were written from these same 100 pairs, so their κ is optimistic. Report a final κ on a fresh, held-out set of pairs.

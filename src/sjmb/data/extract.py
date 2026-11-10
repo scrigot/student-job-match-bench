@@ -113,6 +113,9 @@ _YEAR_LIST = re.compile(
 _YEAR_ANY = re.compile(r"20[2-3]\d")
 _RANGE_WORD = re.compile(r"\b(between|from)\b|-|–|\bto\b|\bthrough\b", re.I)
 MIN_GRAD_YEAR = 2025  # older years in a posting are founding dates, not eligibility
+OPEN_SPAN = 4  # "2027 or later" / "by 2028" cover this many years past / before the bound
+_OR_LATER = re.compile(r"^\W{0,3}(or|and)\s+(later|after|beyond)|^\W{0,3}onwards?", re.I)
+_BY_CUTOFF = re.compile(r"\b(by|before|no later than|prior to)\s+(\w+\.?\s+)?$", re.I)
 
 _NO_SPONSOR = re.compile(
     r"(?<!whether or )(?<!whether )(not|unable to|cannot|can't|will not|won't)\s+(\w+\s+){0,3}"
@@ -172,7 +175,14 @@ def extract_grad_years(text: str) -> list[int]:
             continue
         # "between Fall 2026 and Summer 2027" or "2026-2028" is a range; "2026, 2027, or 2028"
         # is a list. Both come out as the same set when the list is contiguous.
-        if len(found) == 2 and _RANGE_WORD.search(text[trig.start() : m.end()]):
+        before_year = text[trig.end() : m.start(1)] if m.lastindex else ""
+        if len(found) == 1 and _OR_LATER.search(text[m.end() : m.end() + 20]):
+            # "graduating in Fall 2027 or later": an open window upward, not exactly 2027.
+            years.update(range(found[0], found[0] + OPEN_SPAN + 1))
+        elif len(found) == 1 and _BY_CUTOFF.search(before_year):
+            # "must graduate by August 2028": anyone graduating that year or earlier.
+            years.update(range(found[0] - OPEN_SPAN, found[0] + 1))
+        elif len(found) == 2 and _RANGE_WORD.search(text[trig.start() : m.end()]):
             lo, hi = min(found), max(found)
             if hi - lo <= 4:
                 years.update(range(lo, hi + 1))
