@@ -201,3 +201,19 @@ def test_unrelated_field_caps_at_one_and_restricted_program_is_zero():
     assert apply_fit_caps(product, make_posting(track="sales"), Judgment(4, "")).grade == 1
     assert "one school" in hard_check(data, make_posting(title="Yale Summer 2028 Internship"))
     assert hard_check(data, make_posting(title="Data Science Intern")) is None
+
+
+def test_markets_student_at_trading_firm_and_december_window():
+    from sjmb.judge.judges import Judgment, apply_fit_caps, hard_check
+
+    markets = make_profile(track="markets")
+    at_trading = make_posting(track="swe", company="Jump Trading")
+    assert apply_fit_caps(markets, at_trading, Judgment(3, "")).grade == 2
+    described = make_posting(track="data", description="ML for our market-making desk")
+    assert apply_fit_caps(markets, described, Judgment(3, "")).grade == 2
+    assert apply_fit_caps(markets, make_posting(track="swe"), Judgment(3, "")).grade == 1
+    ib = make_profile(track="ib")  # the exception is for markets students only
+    assert apply_fit_caps(ib, at_trading, Judgment(3, "")).grade == 1
+    # A December graduation window excludes the class that graduates the spring before.
+    bmo = make_posting(grad_years=[2029], title="UT @ Austin Summer 2028 Internship")
+    assert "grad year 2028" in hard_check(markets, bmo)

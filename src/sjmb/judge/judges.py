@@ -153,6 +153,9 @@ def same_track(a: str, b: str) -> bool:
     return a == b or (a in TRACK_FAMILY and TRACK_FAMILY.get(a) == TRACK_FAMILY.get(b))
 
 
+_TRADING_FIRM = re.compile(r"\btrading\b|market[- ]mak|hedge fund", re.I)
+
+
 def apply_fit_caps(profile: Profile, posting: Posting, j: Judgment) -> Judgment:
     """Rubric rules that code enforces on the judge's fit grade:
     - 3 and 4 require the student's target track, so another track caps at 2. The track is
@@ -174,7 +177,13 @@ def apply_fit_caps(profile: Profile, posting: Posting, j: Judgment) -> Judgment:
         return j
     if posting.track != "other" and not same_track(posting.track, profile.track):
         # A known but unrelated field is a clear mismatch (1); an adjacent one is fair (2).
-        cap = 2 if posting.track in ADJACENT[profile.track] else 1
+        adjacent = posting.track in ADJACENT[profile.track] or (
+            # Engineering and data roles at a trading firm are adjacent for a markets student.
+            profile.track == "markets"
+            and posting.track in ("swe", "data")
+            and _TRADING_FIRM.search(f"{posting.company} {posting.description}")
+        )
+        cap = 2 if adjacent else 1
         if j.grade > cap:
             kind = "adjacent to" if cap == 2 else "unrelated to"
             return Judgment(
