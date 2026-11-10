@@ -48,21 +48,23 @@ def test_role_type():
 
 def test_grad_year_ranges_with_seasons():
     text = "You will graduate between Fall 2026 and Summer 2027 with a bachelors"
-    assert extract_grad_years(text) == [2026, 2027]
+    assert extract_grad_years(text) == [2027]  # a fall 2026 graduate is in the class of 2027
     assert extract_grad_years("Class of 2028 students") == [2028]
     assert extract_grad_years("no years here") == []
     # Review regressions: lists, all month names, unrelated years.
     assert extract_grad_years("Open to the Class of 2026, 2027, or 2028") == [2026, 2027, 2028]
-    assert extract_grad_years("graduating between December 2026 and August 2027") == [2026, 2027]
+    assert extract_grad_years("graduating between December 2026 and August 2027") == [2027]
     assert extract_grad_years("Bachelor's degree required. Founded in 2021, we are") == []
     assert extract_grad_years("Class of 2027-2029") == [2027, 2028, 2029]
     # Open-ended windows (golden pairs 15, 23, 88): a bound, not a single year.
-    assert extract_grad_years("graduating in Fall 2027 or later") == [2027, 2028, 2029, 2030, 2031]
+    assert extract_grad_years("graduating in Fall 2027 or later") == [2028, 2029, 2030, 2031, 2032]
     assert extract_grad_years("Must graduate by August 2028") == [2024, 2025, 2026, 2027, 2028]
     assert extract_grad_years("Bachelor's degree expected between Fall 2027 and Spring 2028") == [
-        2027,
-        2028,
+        2028
     ]
+    assert extract_grad_years("graduating in Dec. 2028 or Spring 2029") == [2029]
+    assert extract_grad_years("Graduation date of December 2027/Spring 2028") == [2028]
+    assert extract_grad_years("expected to graduate by Summer or Fall 2027") == [2027, 2028]
     assert extract_grad_years("Targeting a 2028 full-time start date") == [2027, 2028]
 
 
@@ -207,3 +209,15 @@ def test_off_track_fields():
     assert classify_track("Sales & Trading Summer Analyst") == "markets"
     assert classify_track("Product Design Intern (2027)") == "design"
     assert classify_track("Machine Learning Engineer") == "data"
+
+
+def test_rising_class_gives_a_grad_year():
+    from sjmb.data.extract import extract_grad_years
+
+    rbc = "2028 Capital Markets Summer Analyst\nWe invite rising college seniors to join."
+    assert extract_grad_years(rbc) == [2029]
+    both = "Internship during summer 2027. Class years: rising junior, rising senior."
+    assert extract_grad_years(both) == [2028, 2029]
+    # Recent graduates welcome: the window is open below, so nothing is stated.
+    assert extract_grad_years(both + " Or recent graduates.") == []
+    assert extract_grad_years("We serve rising seniors in our community.") == []

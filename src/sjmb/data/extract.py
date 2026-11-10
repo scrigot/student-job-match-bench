@@ -109,10 +109,15 @@ _GRAD_TRIGGER = re.compile(
     re.I,
 )
 _YEAR_LIST = re.compile(
-    rf"\D{{0,40}}?{_YEAR}((?:\s*(?:,|-|–|to|and|or|through)\s*(?:or\s+|and\s+)?{_YEAR})*)",
+    rf"\D{{0,40}}?{_YEAR}((?:\s*(?:,|-|–|/|to|and|or|through)\s*(?:or\s+|and\s+)?{_YEAR})*)",
     re.I,
 )
-_YEAR_ANY = re.compile(r"20[2-3]\d")
+_CLASS_YEAR = re.compile(
+    r"((?:spring|summer)\s+or\s+)?"
+    r"((?:fall|autumn|winter|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+)?"
+    r"(20[2-3]\d)",
+    re.I,
+)
 # "Targeting a 2028 full-time start": graduating in the fall before or the spring of that year.
 _FT_START = re.compile(r"\b(20[2-3]\d)\s+full[- ]time start", re.I)
 _RANGE_WORD = re.compile(r"\b(between|from)\b|-|–|\bto\b|\bthrough\b", re.I)
@@ -245,13 +250,22 @@ def classify_role(title: str, description: str = "") -> RoleType:
     return "unknown"
 
 
+_RISING = re.compile(r"\brising\s+(?:college\s+|undergraduate\s+)?(senior|junior|sophomore)", re.I)
+_RISING_OFFSET = {"senior": 1, "junior": 2, "sophomore": 3}
+_SUMMER_YEAR = re.compile(r"\bSummer\s+(20\d\d)\b|\b(20\d\d)\b[^.\n]{0,80}?\bSummer\b", re.I)
+
+
 def extract_grad_years(text: str) -> list[int]:
     years: set[int] = set()
     for trig in _GRAD_TRIGGER.finditer(text):
         m = _YEAR_LIST.match(text, trig.end())
         if not m:
             continue
-        found = [int(y) for y in _YEAR_ANY.findall(m.group(0))]
+        # Years are class years: "December 2028" belongs with the class of spring 2029.
+        # "Summer or Fall 2027" keeps both classes.
+        found = []
+        for both, late, y in _CLASS_YEAR.findall(m.group(0)):
+            found += [int(y), int(y) + 1] if both else [int(y) + (1 if late else 0)]
         found = [y for y in found if y >= MIN_GRAD_YEAR]
         if not found:
             continue
@@ -273,6 +287,15 @@ def extract_grad_years(text: str) -> list[int]:
     for m in _FT_START.finditer(text):
         y = int(m.group(1))
         years.update((y - 1, y))
+    # "Summer 2028 ... rising seniors": a rising senior that summer graduates in 2029.
+    # Skipped when recent graduates are also welcome: the window is then open below.
+    if (
+        (rising := _RISING.findall(text))
+        and (s := _SUMMER_YEAR.search(text))
+        and not re.search(r"recent grad", text, re.I)
+    ):
+        summer = int(s.group(1) or s.group(2))
+        years.update(summer + _RISING_OFFSET[r.lower()] for r in rising)
     return sorted(years)
 
 

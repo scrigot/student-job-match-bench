@@ -175,3 +175,29 @@ Judge vs reference labels (all AI labels; see "Who graded what"):
 
 The tuning set dropped slightly while both held-out sets rose, which is what replacing fitted
 behaviour with general rules should look like. The night-batch test split moved by one pair.
+
+### After the second nightly run (2026-11-11-night)
+
+Two changes, each tested on dev-split pairs of both night batches:
+
+1. **Trading firms.** For a markets student, a software or data role at a trading firm is
+   adjacent (cap 2), not unrelated (cap 1). Dev: 4 pairs changed, all 4 now match the reference.
+2. **Class years.** Graduation dates are read as class years, since every profile graduates in
+   spring: "December 2028 or Spring 2029" is the class of 2029, and "rising seniors" in a
+   Summer 2028 program is the class of 2029. 68 postings changed their window.
+
+A campus pattern for titles like "UT @ Austin" was tried and dropped: the reference never treats
+a campus-named posting as closed, and the pair it was meant to fix was a December window.
+
+Judge vs Claude Sonnet reference, both night batches together:
+
+| Split | Pairs | Exact before | Exact after | Quadratic κ before | Quadratic κ after |
+|---|---:|---:|---:|---:|---:|
+| Dev | 126 | 0.82 | 0.89 | 0.78 | 0.83 |
+| Test | 74 | 0.80 | 0.77 | 0.84 | 0.78 |
+
+Dev rose and test fell. On test the class-year rule gave 0 to two pairs the reference calls
+eligible, and the reference is not consistent on this point: for the same posting and the same
+graduation year it answered 0 for one student and 2 for another. AI labels cannot settle which
+side is right; the human check (`human_check_sheet.csv`) can. The class-year change is its own
+commit so it can be reverted alone.
