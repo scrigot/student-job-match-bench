@@ -174,12 +174,22 @@ def golden_main(argv: list[str] | None = None) -> None:
     ap.add_argument("--profiles", type=int, default=200)
     ap.add_argument("--seed", type=int, default=42, help="profile generator seed")
     ap.add_argument("--as-of", type=date.fromisoformat, default=date(2026, 11, 9))
+    ap.add_argument(
+        "--exclude",
+        type=Path,
+        action="append",
+        default=[],
+        help="an existing sheet whose pairs must not be sampled again (repeatable)",
+    )
     args = ap.parse_args(argv)
+    if args.out.exists():
+        raise SystemExit(f"{args.out} exists; refusing to overwrite a sheet that may hold grades")
 
     postings = {p.id: p for p in (load_fixture() if args.data == "sample" else load_cache())}
     profiles = {p.id: p for p in generate_profiles(args.profiles, args.seed, args.as_of)}
+    used = {(r["profile_id"], r["posting_id"]) for s in args.exclude for r in read_sheet_rows(s)}
     pairs = sample_pairs(
-        read_judgments(args.judgments),
+        [j for j in read_judgments(args.judgments) if (j["profile"], j["posting"]) not in used],
         profiles,
         postings,
         args.as_of,

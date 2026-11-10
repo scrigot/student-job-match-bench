@@ -113,3 +113,16 @@ policy (the rubric's own definitions, or a legal fact about work authorization) 
 test. None is keyed to individual pairs.
 
 **Caveat.** The v3 and v4 rules were written from these same 100 pairs, so their κ is optimistic. Report a final κ on a fresh, held-out set of pairs.
+
+## Held-out check
+
+`heldout_sheet.csv` has 50 more pairs from the same Azure run, sampled with seed 11, with no
+overlap with `grading_sheet.csv`. The judge was tuned on the first 100 pairs, so the 0.80 exact /
+0.85 quadratic κ above is optimistic. The held-out κ is the number to report.
+
+```bash
+uv run bench-kappa golden/heldout_sheet.csv
+```
+
+The judge's answers for these 50 are already cached, so scoring costs nothing. Grade the sheet
+the same way: one whole number 0–4 per row, `notes` optional, saved as CSV.
