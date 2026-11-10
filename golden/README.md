@@ -201,3 +201,7 @@ eligible, and the reference is not consistent on this point: for the same postin
 graduation year it answered 0 for one student and 2 for another. AI labels cannot settle which
 side is right; the human check (`human_check_sheet.csv`) can. The class-year change is its own
 commit so it can be reverted alone.
+
+Decision (Sam, 2026-11-10): the class-year rule stays. A May 2028 graduate is not eligible for a
+posting that asks for "Dec. 2028 or Spring 2029" graduates, so on these pairs the rule is right
+and the reference is wrong.
