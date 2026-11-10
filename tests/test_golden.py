@@ -105,13 +105,15 @@ def test_blind_sheet_and_compare(tmp_path, capsys):
 
     graded = tmp_path / "graded.csv"
     rows = ["# rubric", "pair_no,profile_id,posting_id,student,job,your_grade,notes"]
-    rows += [f"{i},p{i:03d},post{i},s,j,{i % 5},secret note {i}" for i in range(1, 31)]
+    rows += [f"{i},p{i:03d},post{i},s,=HYPERLINK(1),{i % 5},secret note {i}" for i in range(1, 31)]
     graded.write_text("\n".join(rows) + "\n")
     blind = tmp_path / "blind.csv"
     blind_main([str(graded), "--out", str(blind), "--n", "10", "--skip-first", "5"])
     text = blind.read_text()
     assert "secret note" not in text and len(read_sheet_rows(blind)) == 10
     assert all(not r["your_grade"] for r in read_sheet_rows(blind))
+    assert all(r["job"] == "'=HYPERLINK(1)" for r in read_sheet_rows(blind))  # formula neutralized
+    assert _cell("'=HYPERLINK(1)") == "'=HYPERLINK(1)"  # idempotent
     assert all(int(r["profile_id"][1:]) > 5 for r in read_sheet_rows(blind))  # first 5 skipped
     with pytest.raises(SystemExit):
         blind_main([str(graded), "--out", str(blind)])  # never overwrite

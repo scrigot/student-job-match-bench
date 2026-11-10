@@ -250,7 +250,7 @@ def blind_main(argv: list[str] | None = None) -> None:
     grader (a person) can grade the same pairs without seeing the first grader's answers."""
     import random
 
-    from sjmb.golden import COLUMNS, RUBRIC_LINES
+    from sjmb.golden import COLUMNS, RUBRIC_LINES, _cell
 
     ap = argparse.ArgumentParser(prog="bench-blind", description=blind_main.__doc__)
     ap.add_argument("sheets", type=Path, nargs="+", help="graded sheets to sample from")
@@ -287,7 +287,8 @@ def blind_main(argv: list[str] | None = None) -> None:
     w = csv.writer(buf, lineterminator="\n")
     w.writerow(COLUMNS)
     for i, r in enumerate(picked, 1):
-        w.writerow([i, r["profile_id"], r["posting_id"], r["student"], r["job"], "", ""])
+        cells = [r["profile_id"], r["posting_id"], r["student"], r["job"]]
+        w.writerow([i, *(_cell(c) for c in cells), "", ""])
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(buf.getvalue())
     _log(f"wrote {len(picked)} blind pairs to {args.out}")
