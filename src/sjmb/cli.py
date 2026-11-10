@@ -326,3 +326,37 @@ def compare_main(argv: list[str] | None = None) -> None:
         print(f"cohen kappa (quadratic): {cohen_kappa(x, y, weights='quadratic'):.3f}")
     print("\nConfusion matrix (rows = first sheet, columns = second):")
     print(confusion_matrix(x, y).replace("human \\ judge", "first \\ second"))
+
+
+def capture_main(argv: list[str] | None = None) -> None:
+    """Open posting pages in a real browser and save their text and a screenshot."""
+    from collections import Counter as _Counter
+
+    from sjmb.capture import MIN_TEXT, apply_captures, capture_urls
+
+    ap = argparse.ArgumentParser(prog="bench-capture", description=capture_main.__doc__)
+    ap.add_argument("--sheet", type=Path, help="capture the postings in this grading sheet")
+    ap.add_argument("--all", action="store_true", help="every sample posting, not only thin ones")
+    ap.add_argument("--headed", action="store_true", help="show the browser window")
+    ap.add_argument("--retry-failed", action="store_true")
+    ap.add_argument(
+        "--apply",
+        action="store_true",
+        help="write captured text into the sample for postings with thin text",
+    )
+    args = ap.parse_args(argv)
+
+    posts = load_fixture()
+    if args.sheet:
+        ids = {r["posting_id"] for r in read_sheet_rows(args.sheet)}
+        targets = [p for p in posts if p.id in ids]
+    else:
+        targets = [p for p in posts if args.all or len(p.description) < MIN_TEXT]
+    urls = [p.url for p in targets if p.url]
+    _log(f"{len(urls)} postings to capture")
+    caps = capture_urls(urls, headed=args.headed, progress=_log, retry_failed=args.retry_failed)
+    _log(f"capture results: {dict(_Counter(c.status for c in caps))}")
+    if args.apply:
+        n = apply_captures(posts)
+        save_postings(posts, FIXTURE)
+        _log(f"updated {n} sample postings with captured text")
