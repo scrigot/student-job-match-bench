@@ -32,7 +32,7 @@ The Azure judge is the default backend; `--judge stub` exists for CI and tests.
 | `uv run bench` | Grade with the Azure AI Foundry judge (default). See [docs/azure-setup.md](docs/azure-setup.md). |
 | `uv run bench --encoder azure` | Dense rung with Azure `text-embedding-3-small`. |
 | `uv run bench-golden` | Sample judged pairs into a blind 100-pair grading sheet (`golden/grading_sheet.csv`). |
-| `uv run bench-kappa golden/grading_sheet.csv` | Judge–human agreement: exact, κ (unweighted and quadratic), confusion matrix, filter–judge disagreement breakdown. Cached judgments only. |
+| `uv run bench-kappa golden/grading_sheet.csv` | Judge–reference agreement: exact, κ (unweighted and quadratic), confusion matrix, filter–judge disagreement breakdown. Cached judgments only. |
 
 ## The method ladder
 

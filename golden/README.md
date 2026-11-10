@@ -1,4 +1,12 @@
-# Human golden set
+# Golden set (reference labels)
+
+> **Who graded what (corrected 2026-11-10).** Sam graded pairs 1–10 of `grading_sheet.csv` by
+> hand. Pairs 11–100, and all 50 pairs in `heldout_sheet.csv`, were graded by a Claude browser
+> agent that Sam ran, which opened each listing and applied the rubric. So wherever this file
+> says "human" or "you", read "the reference grader": for 140 of 150 pairs that is an AI agent.
+> The κ values below measure agreement between the gpt-4.1-mini judge and that reference, not
+> agreement with a person. A human-graded sample is still needed to validate the reference
+> grader itself.
 
 `grading_sheet.csv` holds 100 (synthetic student, real posting) pairs to grade by hand. The
 grades measure how far the LLM judge can be trusted (Cohen's κ), and they settle whether the
@@ -71,7 +79,7 @@ excludes these by policy; the judge often accepts them.
 
 ## Judge versions against this golden set
 
-All 100 pairs graded by hand (2026-11-09). Judge deployment: `gpt-4.1-mini`.
+All 100 pairs graded (2026-11-09; see "Who graded what" above). Judge deployment: `gpt-4.1-mini`.
 
 | Rubric | Change | Exact | κ unweighted | κ quadratic | Your 0s the judge also gives 0 | Your 1–3s the judge gives 0 |
 |---|---|---:|---:|---:|---:|---:|
@@ -127,7 +135,7 @@ uv run bench-kappa golden/heldout_sheet.csv
 The judge's answers for these 50 are already cached, so scoring costs nothing. Grade the sheet
 the same way: one whole number 0–4 per row, `notes` optional, saved as CSV.
 
-### Held-out result (graded 2026-11-09)
+### Held-out result (graded 2026-11-09 by the Claude browser agent, not by hand)
 
 | Judge | Pairs | Exact | κ unweighted | κ quadratic |
 |---|---:|---:|---:|---:|
