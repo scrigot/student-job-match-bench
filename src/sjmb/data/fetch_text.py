@@ -17,8 +17,10 @@ Responses are cached on disk next to the other raw data, so each URL is fetched 
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
+import socket
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -35,6 +37,34 @@ _REMOVED = re.compile(
 )
 
 
+class UnsafeURL(ValueError):
+    """The URL is not plain public http(s); posting URLs come from third-party lists."""
+
+
+def check_public_url(url: str) -> None:
+    """Refuse non-http(s) schemes and hosts that resolve to private or special addresses."""
+    u = urlparse(url)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        raise UnsafeURL(f"not an http(s) URL: {url[:80]}")
+    try:
+        infos = socket.getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80))
+    except socket.gaierror as e:
+        raise UnsafeURL(f"cannot resolve {u.hostname}") from e
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if not ip.is_global:
+            raise UnsafeURL(f"{u.hostname} resolves to non-public address {ip}")
+
+
+def _guard(request: httpx.Request) -> None:
+    check_public_url(str(request.url))  # runs for the first request and every redirect hop
+
+
+def _host_is(url: str, domain: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return host == domain or host.endswith("." + domain)
+
+
 @dataclass
 class Fetched:
     text: str  # plain-text description, "" when nothing usable was found
@@ -44,7 +74,7 @@ class Fetched:
 
 def _workday(client: httpx.Client, url: str) -> Fetched | None:
     u = urlparse(url)
-    if "myworkdayjobs.com" not in u.netloc:
+    if not _host_is(url, "myworkdayjobs.com"):
         return None
     tenant = u.netloc.split(".")[0]
     parts = [p for p in u.path.split("/") if p]
@@ -65,7 +95,7 @@ def _workday(client: httpx.Client, url: str) -> Fetched | None:
 
 def _greenhouse(client: httpx.Client, url: str) -> Fetched | None:
     m = re.search(r"greenhouse\.io/(?:embed/job_app\?for=)?([\w-]+)/jobs/(\d+)", url)
-    if not m:
+    if not m or not _host_is(url, "greenhouse.io"):
         return None
     r = client.get(f"https://boards-api.greenhouse.io/v1/boards/{m[1]}/jobs/{m[2]}")
     if r.status_code in (404, 410):
@@ -76,7 +106,7 @@ def _greenhouse(client: httpx.Client, url: str) -> Fetched | None:
 
 def _lever(client: httpx.Client, url: str) -> Fetched | None:
     m = re.search(r"jobs\.lever\.co/([\w-]+)/([\w-]{36})", url)
-    if not m:
+    if not m or not _host_is(url, "lever.co"):
         return None
     r = client.get(f"https://api.lever.co/v0/postings/{m[1]}/{m[2]}")
     if r.status_code in (404, 410):
@@ -120,7 +150,7 @@ def _generic(client: httpx.Client, url: str) -> Fetched:
     return Fetched(text, bool(_REMOVED.search(text[:3000])) and len(text) < 3000, method)
 
 
-def fetch_posting_text(url: str, max_chars: int = 4000) -> Fetched:
+def fetch_posting_text(url: str, max_chars: int = 8000) -> Fetched:
     """Fetch (or read from cache) the description behind a posting URL. Never raises on HTTP
     or network errors: a failure comes back as empty text so callers keep the old row."""
     path = cache_dir() / "pages" / f"{hashlib.sha256(url.encode()).hexdigest()[:24]}.json"
@@ -130,7 +160,10 @@ def fetch_posting_text(url: str, max_chars: int = 4000) -> Fetched:
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with httpx.Client(
-            timeout=30, follow_redirects=True, headers={"User-Agent": USER_AGENT}
+            timeout=30,
+            follow_redirects=True,
+            headers={"User-Agent": USER_AGENT},
+            event_hooks={"request": [_guard]},
         ) as client:
             got = None
             for handler in (_workday, _greenhouse, _lever):
@@ -139,7 +172,7 @@ def fetch_posting_text(url: str, max_chars: int = 4000) -> Fetched:
                     break
             if got is None:
                 got = _generic(client, url)
-    except (httpx.HTTPError, ValueError) as e:
+    except (httpx.HTTPError, ValueError) as e:  # UnsafeURL is a ValueError
         return Fetched("", False, f"error: {type(e).__name__}")
     got = Fetched(" ".join(got.text.split())[:max_chars], got.removed, got.method)
     path.write_text(json.dumps({"url": url, **got.__dict__}))
