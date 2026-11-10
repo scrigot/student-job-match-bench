@@ -167,7 +167,7 @@ class ReferenceGrader:
             resp = self.llm.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": content}],
-                max_completion_tokens=600,
+                max_completion_tokens=3000,  # room for reasoning models
             )
             return resp.choices[0].message.content or ""
         if self.llm is not None:  # test double
