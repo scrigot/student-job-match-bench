@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 
 from sjmb.data.fetch_text import UnsafeURL, check_public_url
 from sjmb.data.loaders import cache_dir
+from sjmb.public_proxy import PublicProxy
 
 # Signs that the site is asking for a human or a login. We stop there.
 BLOCK_SIGNS = re.compile(
@@ -91,15 +92,20 @@ def capture_urls(
             todo.append(u)
     if todo:
         last_hit: dict[str, float] = {}
-        with sync_playwright() as pw:
+        # All browser traffic goes through a local proxy that refuses non-public addresses.
+        # `<-loopback>` makes Chrome send even localhost requests to the proxy, where they fail.
+        with PublicProxy() as proxy_url, sync_playwright() as pw:
+            opts = {
+                "headless": not headed,
+                "proxy": {"server": proxy_url, "bypass": "<-loopback>"},
+            }
             try:
-                browser = pw.chromium.launch(channel="chrome", headless=not headed)
+                browser = pw.chromium.launch(channel="chrome", **opts)
             except PlaywrightError:
-                browser = pw.chromium.launch(headless=not headed)  # Playwright's own Chromium
+                browser = pw.chromium.launch(**opts)  # Playwright's own Chromium
             context = browser.new_context(
                 viewport={"width": 1280, "height": 1600}, service_workers="block"
             )
-            context.route("**/*", _public_only_route())  # every request, redirect and subresource
             page = context.new_page()
             for n, url in enumerate(todo, 1):
                 host = urlparse(url).hostname or ""
@@ -111,36 +117,6 @@ def capture_urls(
                 progress(f"captured {n}/{len(todo)}: {done[url].status:8} {url[:70]}")
             browser.close()
     return [done[u] for u in urls]
-
-
-def _public_only_route():
-    """A Playwright route handler that aborts any request to a non-public address.
-
-    Posting URLs come from third-party lists, and a page can redirect or load subresources
-    anywhere, so the check runs on every request the browser makes. Host verdicts are cached
-    for the run. Residual risk: a host that re-resolves to a private address between this
-    check and the browser's own lookup (DNS rebinding) is not covered.
-    """
-    verdict: dict[str, bool] = {}
-
-    def handle(route) -> None:
-        req_url = route.request.url
-        if req_url.startswith(("data:", "blob:", "about:")):
-            route.continue_()
-            return
-        host = urlparse(req_url).hostname or ""
-        if host not in verdict:
-            try:
-                check_public_url(req_url)
-                verdict[host] = True
-            except UnsafeURL:
-                verdict[host] = False
-        if verdict[host]:
-            route.continue_()
-        else:
-            route.abort("blockedbyclient")
-
-    return handle
 
 
 def view_url(url: str) -> str:

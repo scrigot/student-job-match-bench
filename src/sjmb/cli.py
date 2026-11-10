@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 from collections import Counter
 from datetime import date
@@ -360,3 +361,61 @@ def capture_main(argv: list[str] | None = None) -> None:
         n = apply_captures(posts)
         save_postings(posts, FIXTURE)
         _log(f"updated {n} sample postings with captured text")
+
+
+def nightly_main(argv: list[str] | None = None) -> None:
+    """Grade a fresh batch with the judge and a reference grader, and write a morning report."""
+    import os
+
+    from sjmb.nightly import run_nightly
+    from sjmb.reference import ReferenceGrader, ReferenceUnavailable
+
+    load_dotenv()
+    ap = argparse.ArgumentParser(prog="bench-nightly", description=nightly_main.__doc__)
+    ap.add_argument("--n", type=int, default=100, help="pairs in the batch")
+    ap.add_argument("--judge", choices=["azure", "stub"], default="azure")
+    ap.add_argument(
+        "--reference",
+        choices=["auto", "azure", "claude", "none"],
+        default="auto",
+        help="auto = the Azure reference deployment if configured, else none",
+    )
+    ap.add_argument("--max-spend", type=float, default=5.0, help="stop if the estimate is higher")
+    ap.add_argument("--capture", action="store_true", help="browser-capture thin postings first")
+    ap.add_argument("--name", help="batch folder name (default: today's date)")
+    ap.add_argument("--seed", type=int, help="default: derived from the batch name")
+    ap.add_argument("--as-of", type=date.fromisoformat, default=date.today())
+    args = ap.parse_args(argv)
+
+    name = args.name or f"{date.today().isoformat()}-auto"
+    seed = (
+        args.seed
+        if args.seed is not None
+        else int(hashlib.sha256(name.encode()).hexdigest()[:6], 16)
+    )
+    judge = make_judge(args.judge, args.as_of, max_calls=args.n + 50)
+    reference = None
+    kind = args.reference
+    if kind == "auto":
+        kind = "azure" if os.environ.get("AZURE_REFERENCE_DEPLOYMENT") else "none"
+    if kind != "none":
+        try:
+            reference = ReferenceGrader(kind, args.as_of, max_calls=args.n + 50)
+        except ReferenceUnavailable as e:
+            raise SystemExit(f"reference grader unavailable: {e}") from None
+    report = run_nightly(
+        generate_profiles(200, 42, args.as_of),
+        load_fixture(),
+        judge,
+        reference,
+        args.as_of,
+        out_dir=Path("golden/batches") / name,
+        golden_dir=Path("golden"),
+        n=args.n,
+        seed=seed,
+        max_spend=args.max_spend,
+        capture=args.capture,
+        progress=_log,
+    )
+    print(report.read_text())
+    _log(f"wrote {report}")

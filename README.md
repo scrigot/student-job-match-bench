@@ -31,6 +31,8 @@ The Azure judge is the default backend; `--judge stub` exists for CI and tests.
 | `uv sync --extra dense` then `uv run bench --encoder st` | Dense rung with sentence-transformers (all-MiniLM-L6-v2). |
 | `uv run bench` | Grade with the Azure AI Foundry judge (default). See [docs/azure-setup.md](docs/azure-setup.md). |
 | `uv run bench --encoder azure` | Dense rung with Azure `text-embedding-3-small`. |
+| `scripts/nightly.sh --n 100` | Overnight loop: fresh batch, judge, reference grader, morning report. See [docs/nightly-loop.md](docs/nightly-loop.md). |
+| `uv run bench-capture` | Read thin postings in a real browser (`uv sync --extra capture`). |
 | `uv run bench-golden` | Sample judged pairs into a blind 100-pair grading sheet (`golden/grading_sheet.csv`). |
 | `uv run bench-kappa golden/grading_sheet.csv` | Judge–reference agreement: exact, κ (unweighted and quadratic), confusion matrix, filter–judge disagreement breakdown. Cached judgments only. |
 
@@ -81,7 +83,7 @@ Judge: _ · κ (quadratic) vs. golden set: _ · profiles: _ · postings: _
 
 | | |
 |---|---|
-| **Postings** | Public Greenhouse boards (26 firms) and Lever boards (4 firms) across trading, asset management, banking, consulting and tech, plus the SimplifyJobs Summer 2027 internship and new-grad lists. Board tokens are in `src/sjmb/data/loaders.py`. |
+| **Postings** | Public Greenhouse boards (26 firms), Lever boards (4 firms) and Workday campus boards of 11 banks, across trading, asset management, banking, consulting and tech, plus the SimplifyJobs Summer 2027 internship and new-grad lists. Board tokens are in `src/sjmb/data/loaders.py`. |
 | **Sample fixture** | `src/sjmb/data/fixtures/sample_postings.json`: 230 postings (4 per board plus a track-stratified Simplify slice), descriptions kept up to 4,000 characters so the judge reads the full posting. The only data in git. |
 | **Extraction** | Rule-based at ingest (`sjmb/data/extract.py`): track, internship vs new-grad vs experienced, eligible grad years, sponsorship, terms. Greenhouse supplies deadlines; Simplify supplies sponsorship and active status. |
 | **Profiles** | 200 synthetic students from a seeded generator, stratified over 7 tracks × 4 class years × 3 work-authorization statuses. No real people. |

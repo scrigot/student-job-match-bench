@@ -26,6 +26,7 @@ bench-golden = "sjmb.cli:golden_main"
 bench-judge-one = "sjmb.cli:judge_one_main"
 bench-compare = "sjmb.cli:compare_main"
 bench-capture = "sjmb.cli:capture_main"
+bench-nightly = "sjmb.cli:nightly_main"
 bench-blind = "sjmb.cli:blind_main"
 
 [dependency-groups]
