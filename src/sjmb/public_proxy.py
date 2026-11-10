@@ -18,6 +18,7 @@ import threading
 from urllib.parse import urlsplit
 
 ALLOWED_PORTS = {80, 443, 8080, 8443}
+MAX_BODY = 1_000_000
 
 
 def public_address(host: str, port: int) -> str:
@@ -69,20 +70,34 @@ class _Handler(socketserver.StreamRequestHandler):
                     self.wfile.flush()
                     _relay(self.connection, up)
                 return
+            # Plain http: forward exactly ONE request, then close. The target is checked for
+            # this request only, so a second request must not ride on the same upstream socket.
             u = urlsplit(target)
             if u.scheme != "http" or not u.hostname:
                 raise ValueError("only http and https are proxied")
             port = u.port or 80
             addr = public_address(u.hostname, port)
             path = (u.path or "/") + (f"?{u.query}" if u.query else "")
+            lower = [h.lower() for h in headers]
+            if any(h.startswith(b"transfer-encoding:") for h in lower):
+                raise ValueError("chunked request bodies are not proxied")
+            length = 0
+            for h in lower:
+                if h.startswith(b"content-length:"):
+                    length = int(h.split(b":", 1)[1].strip())
+            if not 0 <= length <= MAX_BODY:
+                raise ValueError("request body too large")
+            body = self.rfile.read(length) if length else b""  # from the buffered reader
             kept = [h for h in headers if not h.lower().startswith((b"proxy-", b"connection:"))]
             with socket.create_connection((addr, port), timeout=30) as up:
                 up.sendall(
                     f"{method} {path} HTTP/1.1\r\n".encode("latin-1")
                     + b"".join(kept)
                     + b"Connection: close\r\n\r\n"
+                    + body
                 )
-                _relay(self.connection, up)
+                while data := up.recv(65536):  # upstream -> client only
+                    self.wfile.write(data)
         except (ValueError, OSError):
             with contextlib.suppress(OSError):
                 self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
