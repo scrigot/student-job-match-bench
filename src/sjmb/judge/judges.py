@@ -40,6 +40,8 @@ class Judgment:
     grade: int | None  # None = the judge reply could not be parsed; excluded from scoring
     reason: str = ""
     cached: bool = False
+    fit: int | None = None  # the judge's fit score even when a disqualifier made the grade 0
+    disqualifier: str | None = None
 
 
 class Judge(Protocol):
@@ -124,6 +126,29 @@ def location_match(profile: Profile, posting: Posting) -> bool | None:
     return False
 
 
+_US = re.compile(r"\b(U\.?S\.?|United States|American)\b")
+_CITIZEN_OR_CLEARANCE = re.compile(r"citizen|clearance", re.I)
+
+
+def _us_authorized_misread(profile: Profile, reason: str) -> bool:
+    """A US citizen or permanent resident already holds US work authorization, so a [d] that
+    only cites a US work-authorization or no-sponsorship requirement is a misread."""
+    return (
+        profile.work_auth in ("citizen", "permanent_resident")
+        and bool(_US.search(reason))
+        and not _CITIZEN_OR_CLEARANCE.search(reason)
+    )
+
+
+# Tracks the golden set treats as one family for the "target track" rule: a quant trading
+# role is on-track for a markets student (human 4 on pair 25, 3s on pairs 75 and 85).
+TRACK_FAMILY = {"quant": "trading", "markets": "trading"}
+
+
+def same_track(a: str, b: str) -> bool:
+    return a == b or (a in TRACK_FAMILY and TRACK_FAMILY.get(a) == TRACK_FAMILY.get(b))
+
+
 def apply_fit_caps(profile: Profile, posting: Posting, j: Judgment) -> Judgment:
     """Rubric rules that code enforces on the judge's fit grade:
     - 3 and 4 require the student's target track, so another track caps at 2. The track is
@@ -131,9 +156,19 @@ def apply_fit_caps(profile: Profile, posting: Posting, j: Judgment) -> Judgment:
     - a 4 needs one of the student's preferred locations (golden set: every human 4 has one,
       and 8 of 10 human 3s are right-track roles in other cities).
     """
-    if j.grade is None or j.grade == 0:
+    if j.grade is None:
         return j
-    if j.grade > 2 and posting.track not in ("other", profile.track):
+    if j.disqualifier == "d" and j.fit and _us_authorized_misread(profile, j.reason):
+        j = Judgment(
+            j.fit,
+            f"[override d: US work authorization is satisfied] {j.reason}",
+            j.cached,
+            j.fit,
+            None,
+        )
+    if j.grade == 0:
+        return j
+    if j.grade > 2 and posting.track != "other" and not same_track(posting.track, profile.track):
         return Judgment(
             2, f"[capped: {posting.track} is not the {profile.track} track] {j.reason}", j.cached
         )
@@ -171,7 +206,9 @@ class AzureJudge:
                         grade, reason = parsed.grade, parsed.reason
                     except ValueError:
                         pass
-                self.cache[row["key"]] = Judgment(grade, reason, True)
+                self.cache[row["key"]] = Judgment(
+                    grade, reason, True, row.get("fit"), row.get("disqualifier")
+                )
         self.llm = llm or azure.client()
 
     def _key(self, profile: Profile, posting: Posting) -> str:
@@ -229,6 +266,8 @@ class AzureJudge:
             "reason": j.reason,
             "profile": profile.id,
             "posting": posting.id,
+            "fit": j.fit,
+            "disqualifier": j.disqualifier,
         }
         if j.grade is None:
             row["raw"] = raw[:4000]
@@ -290,10 +329,10 @@ def parse_judgment(content: str) -> Judgment:
             fit = int(data["fit"])
             dq = str(data.get("disqualifier") or "none").strip().lower()
             if dq[:1] in DISQUALIFIERS and (len(dq) == 1 or not dq[1].isalpha()):
-                return Judgment(0, f"[{dq[:1]}] {reason}")  # any fit, even 0
+                return Judgment(0, f"[{dq[:1]}] {reason}", fit=max(fit, 1), disqualifier=dq[:1])
             if 0 <= fit <= 4:
                 # No disqualifier means eligible, so the grade is at least 1.
-                return Judgment(max(fit, 1), reason)
+                return Judgment(max(fit, 1), reason, fit=max(fit, 1))
         grade = int(data["grade"])
         if 0 <= grade <= 4:
             return Judgment(grade, reason)

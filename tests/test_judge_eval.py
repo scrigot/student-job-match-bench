@@ -153,3 +153,34 @@ def test_off_track_caps_at_two():
         apply_fit_caps(quant, make_posting(track="swe", location="Chicago"), Judgment(1, "")).grade
         == 1
     )
+
+
+def test_quant_trading_is_on_track_for_markets():
+    from sjmb.judge.judges import Judgment, apply_fit_caps
+
+    markets = make_profile(track="markets", locations=["Chicago, IL"])
+    qt = make_posting(track="quant", location="Chicago")
+    assert apply_fit_caps(markets, qt, Judgment(4, "")).grade == 4
+    assert (
+        apply_fit_caps(
+            markets, make_posting(track="swe", location="Chicago"), Judgment(4, "")
+        ).grade
+        == 2
+    )
+
+
+def test_us_work_auth_d_is_overridden_for_permanent_residents():
+    from sjmb.judge.judges import Judgment, apply_fit_caps
+
+    pr = make_profile(work_auth="permanent_resident", locations=["New York, NY"])
+    visa = make_profile(work_auth="needs_sponsorship", locations=["New York, NY"])
+    post = make_posting(location="NYC")
+    d = Judgment(
+        0, "[d] Requires US work authorization without sponsorship", fit=4, disqualifier="d"
+    )
+    assert apply_fit_caps(pr, post, d).grade == 4  # a green-card holder is US-authorized
+    assert apply_fit_caps(visa, post, d).grade == 0  # needs sponsorship: the 0 stands
+    cit = Judgment(0, "[d] U.S. citizenship required", fit=4, disqualifier="d")
+    assert apply_fit_caps(pr, post, cit).grade == 0  # citizenship-only roles still exclude
+    uk = Judgment(0, "[d] Requires UK right to work", fit=3, disqualifier="d")
+    assert apply_fit_caps(pr, post, uk).grade == 0  # foreign authorization still excludes

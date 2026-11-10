@@ -79,7 +79,13 @@ All 100 pairs graded by hand (2026-11-09). Judge deployment: `gpt-4.1-mini`.
 | v3 | Explicit disqualifiers a–g taken from the golden notes, full posting text | 0.53 | 0.22 | 0.46 | 44 / 54 | 24 / 41 |
 | v4 | Code derives the grade from disqualifier + fit; a non-US location is fit, not eligibility | 0.55 | 0.26 | 0.48 | 43 / 52 | 23 / 40 |
 | v5 | Found by hand in the Foundry playground: rule (a) is career stage only, one made-up example, the reply lists a check per rule before it picks a disqualifier | 0.60 | 0.45 | 0.55 | 39 / 54 | 2 / 41 |
-| v5 + code check | Graduation windows checked in code before any LLM call (`hard_check`); the extractor reads "2027 or later" and "by 2028" as open windows | **0.61** | **0.46** | **0.58** | **40 / 54** | **1 / 41** |
+| v5 + code check | Graduation windows checked in code before any LLM call (`hard_check`); the extractor reads "2027 or later" and "by 2028" as open windows | 0.61 | 0.46 | 0.58 | 40 / 54 | 1 / 41 |
+| + location cap | A 4 needs one of the student's preferred locations, checked in code | 0.68 | 0.55 | 0.64 | 40 / 54 | 1 / 41 |
+| + employer pages | Simplify rows get the employer page's text (93 of 110) | 0.72 | 0.59 | 0.72 | 46 / 54 | 3 / 41 |
+| + track cap | Off-track roles cap at 2, as the rubric defines | 0.76 | 0.64 | 0.78 | 46 / 54 | 3 / 41 |
+| + 8,000-char text | Eligibility lines at the end of postings no longer cut off; 2 more grad-window phrasings | 0.78 | 0.66 | 0.79 | 51 / 54 | 5 / 41 |
+| + trading family | Quant trading counts as on-track for markets students | 0.79 | 0.67 | 0.82 | 51 / 54 | 5 / 41 |
+| **+ US work-auth fix** | A [d] citing only US work authorization never excludes a citizen or permanent resident | **0.80** | **0.69** | **0.85** | **51 / 54** | **4 / 41** |
 
 v4 scored 97 pairs: 3 replies could not be parsed and are cached as unparsable. v5 scored all 100.
 Its first run lost 27 replies to a parser bug: the parser rejected `"fit": 0` on disqualified pairs.
@@ -99,5 +105,11 @@ The bug is fixed, and failed replies now keep their raw text so they can be re-p
 2029" and still got pair 15 right only 2 times in 6 at default temperature, and 0 in 6 at
 temperature 0. Comparing years is arithmetic, so code does it. The LLM reads text and judges fit.
 The code check fires on 5 golden pairs and agrees with the human grade on all 5.
+
+**Where the gains came from.** Each step from v5 on moved a fact out of the LLM and into
+code or data: dates, locations, tracks, and the employer's full posting text. The LLM now does
+what only it can: read the posting and judge eligibility and fit. Every code rule is a general
+policy (the rubric's own definitions, or a legal fact about work authorization) and has a unit
+test. None is keyed to individual pairs.
 
 **Caveat.** The v3 and v4 rules were written from these same 100 pairs, so their κ is optimistic. Report a final κ on a fresh, held-out set of pairs.
