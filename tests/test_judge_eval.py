@@ -165,7 +165,7 @@ def test_quant_trading_is_on_track_for_markets():
         apply_fit_caps(
             markets, make_posting(track="swe", location="Chicago"), Judgment(4, "")
         ).grade
-        == 2
+        == 1  # swe is unrelated to markets
     )
 
 
@@ -184,3 +184,20 @@ def test_us_work_auth_d_is_overridden_for_permanent_residents():
     assert apply_fit_caps(pr, post, cit).grade == 0  # citizenship-only roles still exclude
     uk = Judgment(0, "[d] Requires UK right to work", fit=3, disqualifier="d")
     assert apply_fit_caps(pr, post, uk).grade == 0  # foreign authorization still excludes
+
+
+def test_unrelated_field_caps_at_one_and_restricted_program_is_zero():
+    from sjmb.judge.judges import Judgment, apply_fit_caps, hard_check
+
+    data = make_profile(track="data", locations=["Austin, TX"])
+    hw = make_posting(track="hardware", location="Austin, TX")
+    assert apply_fit_caps(data, hw, Judgment(3, "")).grade == 1  # unrelated field
+    assert (
+        apply_fit_caps(data, make_posting(track="swe", location="Austin"), Judgment(3, "")).grade
+        == 2
+    )
+    product = make_profile(track="product", locations=["Austin, TX"])
+    assert apply_fit_caps(product, make_posting(track="design"), Judgment(4, "")).grade == 2
+    assert apply_fit_caps(product, make_posting(track="sales"), Judgment(4, "")).grade == 1
+    assert "one school" in hard_check(data, make_posting(title="Yale Summer 2028 Internship"))
+    assert hard_check(data, make_posting(title="Data Science Intern")) is None

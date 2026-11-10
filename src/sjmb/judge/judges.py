@@ -18,6 +18,7 @@ from typing import Protocol
 
 from sjmb import azure
 from sjmb.azure import cache_root
+from sjmb.data.extract import restriction
 from sjmb.filters.eligibility import violations
 from sjmb.judge.rubric import PROMPT, RUBRIC, RUBRIC_VERSION
 from sjmb.retrievers.base import tokenize
@@ -31,7 +32,7 @@ ADJACENT = {
     "consulting": {"ib", "product"},
     "swe": {"data", "quant", "product"},
     "data": {"swe", "quant", "product"},
-    "product": {"swe", "data", "consulting"},
+    "product": {"swe", "data", "consulting", "design"},
 }
 
 
@@ -91,6 +92,9 @@ def hard_check(profile: Profile, posting: Posting) -> str | None:
 
     Rule of thumb from the golden set: a field the posting does not state never disqualifies.
     """
+    # Programs closed to an ordinary undergraduate: advanced degree, veterans, one school.
+    if reason := restriction(posting.title, posting.description):
+        return reason
     # Graduation window: only when the posting states one (empty list = not stated).
     if posting.grad_years and profile.grad_year not in posting.grad_years:
         window = ", ".join(str(y) for y in posting.grad_years)
@@ -168,10 +172,14 @@ def apply_fit_caps(profile: Profile, posting: Posting, j: Judgment) -> Judgment:
         )
     if j.grade == 0:
         return j
-    if j.grade > 2 and posting.track != "other" and not same_track(posting.track, profile.track):
-        return Judgment(
-            2, f"[capped: {posting.track} is not the {profile.track} track] {j.reason}", j.cached
-        )
+    if posting.track != "other" and not same_track(posting.track, profile.track):
+        # A known but unrelated field is a clear mismatch (1); an adjacent one is fair (2).
+        cap = 2 if posting.track in ADJACENT[profile.track] else 1
+        if j.grade > cap:
+            kind = "adjacent to" if cap == 2 else "unrelated to"
+            return Judgment(
+                cap, f"[capped: {posting.track} is {kind} {profile.track}] {j.reason}", j.cached
+            )
     if j.grade == 4 and location_match(profile, posting) is False:
         return Judgment(3, f"[capped: not a preferred location] {j.reason}", j.cached)
     return j

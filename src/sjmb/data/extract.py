@@ -142,7 +142,85 @@ _CITIZEN = re.compile(
 _TERM = re.compile(r"\b(summer|fall|winter|spring)\s+(20\d\d)\b", re.I)
 
 
+# Fields no student profile targets. Checked on the title only, and first, so that
+# "AI Hardware Physical Design Engineer" is hardware and not data.
+_OFF_TRACK_TITLES: list[tuple[Track, re.Pattern[str]]] = [
+    (
+        "hardware",
+        re.compile(
+            r"hardware|FPGA|ASIC|physical design|firmware|embedded|silicon|circuit|"
+            r"electrical engineer|mechanical engineer|validation engineer|\bRF\b",
+            re.I,
+        ),
+    ),
+    (
+        "sales",
+        re.compile(
+            r"\bsales\b(?!\s*(?:&|and)\s*trading)|account executive|business development rep|"
+            r"\bSDR\b|\bBDR\b",
+            re.I,
+        ),
+    ),
+    ("design", re.compile(r"product design|designer|\bUX\b|\bUI\b", re.I)),
+]
+
+_ADVANCED_DEGREE_TITLE = re.compile(
+    r"\b(MBA|Ph\.?D|Postdoc\w*|Post-?Doc\w*|Doctoral|Master'?s|M\.?D\.?|J\.?D\.?)\b", re.I
+)
+_ADVANCED_DEGREE_TEXT = re.compile(
+    r"(?:currently |must be )?(?:pursuing|enrolled in|candidate for|working toward)s? (?:an? )?"
+    r"(?:\d-year )?(MBA|Ph\.?D\.?|Master'?s|J\.?D\.?|doctoral|graduate degree)"
+    r"|(MBA|J\.?D\.?) (?:candidate|student)s?\b",
+    re.I,
+)
+_UNDERGRAD_OK = re.compile(r"bachelor|undergraduate|\bB\.?[SA]\.?\b|\bBS/MS\b", re.I)
+_PREFERRED = re.compile(r"prefer|a plus|nice to have|ideal|bonus|desired", re.I)
+_VETERAN = re.compile(r"veterans?\b|military spouse", re.I)
+# Programs for one school's students. A short list of names seen in campus postings; a posting
+# that names a school in its title is treated as restricted to that school.
+_SCHOOL_TITLE = re.compile(
+    r"\b(Villanova|Howard|Spelman|Morehouse|Notre Dame|Georgetown|Wharton|Harvard|Stanford|"
+    r"Princeton|Yale|Cornell|Columbia|Dartmouth|Duke|Vanderbilt|Baruch|Rutgers|Fordham|"
+    r"Penn State|Georgia Tech|Carnegie Mellon|MIT|NYU|UCLA|USC|UVA|UNC|BYU)\b"
+    r"|\b(University|College) of [A-Z][a-z]+",
+)
+
+
+def restriction(title: str, description: str = "") -> str | None:
+    """A reason this posting is closed to an ordinary undergraduate, or None.
+
+    Covers what the title or an explicit sentence states: an advanced-degree requirement, a
+    veterans-only program, or a program for one named school. Deliberately conservative: a
+    sentence that also names a bachelor's degree is not treated as advanced-degree-only.
+    """
+    if m := _ADVANCED_DEGREE_TITLE.search(title):
+        return f"advanced degree in title ({m.group(0)})"
+    if re.search(r"summer associate", title, re.I) and re.search(
+        r"\bMBA\b|\bJ\.?D\.?\b|business school|law school", description, re.I
+    ):
+        return "summer associate program for MBA or JD candidates"
+    for m in _ADVANCED_DEGREE_TEXT.finditer(description):
+        start = description.rfind(".", 0, m.start()) + 1
+        end = description.find(".", m.end())
+        sentence = description[start : end if end != -1 else m.end() + 200]
+        lead = description[max(0, m.start() - 80) : m.start()]
+        if _PREFERRED.search(lead) or _PREFERRED.search(sentence[: m.start() - start]):
+            continue  # "preferred: pursuing a Master's" is not a requirement
+        if not _UNDERGRAD_OK.search(sentence):
+            return f"requires an advanced degree ({m.group(0).strip()[:40]})"
+    if _VETERAN.search(title) or (
+        _VETERAN.search(description[:800]) and re.search(r"program", description[:800], re.I)
+    ):
+        return "program for veterans or military spouses"
+    if m := _SCHOOL_TITLE.search(title):
+        return f"program for students of one school ({m.group(0)})"
+    return None
+
+
 def classify_track(title: str, description: str = "") -> Track:
+    for track, pat in _OFF_TRACK_TITLES:
+        if pat.search(title):
+            return track
     for text in (title, description[:600]):
         for track, pat in _TRACK_PATTERNS:
             if pat.search(text):

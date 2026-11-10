@@ -176,3 +176,34 @@ def test_parse_workday():
         "Acme Bank",
         "Join our M&A team.",
     )
+
+
+def test_restricted_programs():
+    from sjmb.data.extract import restriction
+
+    assert "one school" in restriction("Villanova Summer 2028 Internship - Investment Banking")
+    assert "MBA" in restriction("2027 Investment Banking Summer Associate", "For MBA students.")
+    assert "advanced degree" in restriction("Quant Research Intern - PhD/Postdoctoral")
+    assert "advanced degree" in restriction(
+        "Hardware Intern", "Currently pursuing a Masters Degree in Electrical Engineering."
+    )
+    assert "veterans" in restriction("Data Intern", "Veteran Internship Program for veterans.")
+    # Not restrictions: undergraduates named, a preference, or no statement at all.
+    assert restriction("SWE Intern", "Currently pursuing a Bachelor's or Master's degree.") is None
+    assert (
+        restriction(
+            "Algorithm Intern",
+            "Preferred Qualifications: Students pursuing a Master's OR PhD degree.",
+        )
+        is None
+    )
+    assert restriction("Investment Banking Summer Analyst", "Join our M&A team.") is None
+    assert restriction("Summer Associate", "Join our consulting team as an undergraduate.") is None
+
+
+def test_off_track_fields():
+    assert classify_track("AI Hardware Physical Design Engineer Intern") == "hardware"
+    assert classify_track("Early Career, Inside Sales Representative") == "sales"
+    assert classify_track("Sales & Trading Summer Analyst") == "markets"
+    assert classify_track("Product Design Intern (2027)") == "design"
+    assert classify_track("Machine Learning Engineer") == "data"

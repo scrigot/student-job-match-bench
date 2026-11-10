@@ -21,9 +21,10 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from sjmb.filters.eligibility import violations
 from sjmb.golden import write_sheet
 from sjmb.judge.agreement import cohen_kappa, read_sheet_rows
-from sjmb.judge.judges import same_track
+from sjmb.judge.judges import hard_check, same_track
 from sjmb.retrievers import BM25, Dense, Hybrid, make_encoder, top_k
 from sjmb.types import Posting, Profile
 
@@ -65,6 +66,11 @@ class Pair:
         return "finance" if self.profile.track in FINANCE_TRACKS else "other"
 
 
+def known_ineligible(profile: Profile, posting: Posting, as_of: date) -> bool:
+    """True when the code checks alone already rule the pair out."""
+    return bool(violations(profile, posting, as_of)) or hard_check(profile, posting) is not None
+
+
 def make_batch(
     profiles: list[Profile],
     postings: list[Posting],
@@ -74,9 +80,16 @@ def make_batch(
     seed: int = 0,
     per_posting: int = 4,
     encoder: str = "lsa",
+    as_of: date | None = None,
+    max_ineligible: float = 0.3,
 ) -> list[Pair]:
     """n fresh pairs: each student's top hybrid results plus a few from further down, with
-    `finance_share` of them for IB and markets students."""
+    `finance_share` of them for IB and markets students.
+
+    At most `max_ineligible` of the batch may be pairs the code already knows are ineligible
+    (wrong level, class year, restricted program, ...). Without the cap a batch is mostly
+    obvious zeros, which both graders agree on and which says little about the judge."""
+    as_of = as_of or date.today()
     rng = random.Random(seed)
     bm25 = BM25().fit(postings)
     dense = Dense(make_encoder(encoder)).fit(postings)
@@ -99,11 +112,16 @@ def make_batch(
         per_post: Counter[str] = Counter()
         per_prof: Counter[str] = Counter()
         cap_prof = max(4, -(-want[group] // 8))  # spread over at least ~8 students
+        ineligible_left = round(want[group] * max_ineligible)
         for pair in pool:
             if len([c for c in chosen if c.group == group]) >= want[group]:
                 break
             if per_post[pair.posting.id] >= per_posting or per_prof[pair.profile.id] >= cap_prof:
                 continue
+            if known_ineligible(pair.profile, pair.posting, as_of):
+                if ineligible_left <= 0:
+                    continue
+                ineligible_left -= 1
             per_post[pair.posting.id] += 1
             per_prof[pair.profile.id] += 1
             chosen.append(pair)
@@ -143,7 +161,7 @@ def run_nightly(
     """Run one night. Returns the path of the report."""
     if out_dir.exists():
         raise SystemExit(f"{out_dir} exists; refusing to overwrite a batch")
-    batch = make_batch(profiles, postings, n, used_pairs(golden_dir), seed=seed)
+    batch = make_batch(profiles, postings, n, used_pairs(golden_dir), seed=seed, as_of=as_of)
     if not batch:
         raise SystemExit("no fresh pairs left: fetch more postings or add profiles")
     progress(

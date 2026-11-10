@@ -6,7 +6,21 @@ from dataclasses import asdict, dataclass, field
 from datetime import date
 from typing import Literal
 
-Track = Literal["ib", "markets", "quant", "consulting", "swe", "data", "product", "other"]
+# The first seven are the student tracks. hardware, sales and design are posting-only tracks:
+# known fields that no profile targets. "other" means the extractor could not tell.
+Track = Literal[
+    "ib",
+    "markets",
+    "quant",
+    "consulting",
+    "swe",
+    "data",
+    "product",
+    "hardware",
+    "sales",
+    "design",
+    "other",
+]
 RoleType = Literal["internship", "new_grad", "experienced", "unknown"]
 # us_persons = U.S. citizens or permanent residents only (no visa sponsorship).
 Sponsorship = Literal["offers", "no", "us_persons", "citizens_only", "unknown"]

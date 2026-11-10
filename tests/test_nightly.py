@@ -2,7 +2,7 @@ from conftest import AS_OF
 
 from sjmb.data import load_fixture
 from sjmb.judge import StubJudge
-from sjmb.nightly import make_batch, run_nightly, split_of, used_pairs
+from sjmb.nightly import known_ineligible, make_batch, run_nightly, split_of, used_pairs
 from sjmb.profiles import generate_profiles
 from sjmb.reference import ReferenceGrader
 
@@ -11,12 +11,16 @@ REPLY = '{"disqualifier": "none", "fit": 2, "reason": "adjacent", "evidence": ""
 
 def test_batch_is_fresh_half_finance_and_split_by_posting():
     posts, profiles = load_fixture(), generate_profiles(200, as_of=AS_OF)
-    first = make_batch(profiles, posts, 60, used=set(), seed=1)
+    first = make_batch(profiles, posts, 60, used=set(), seed=1, as_of=AS_OF)
     assert len(first) == 60 and len({p.key for p in first}) == 60
     assert sum(p.group == "finance" for p in first) == 30
-    again = make_batch(profiles, posts, 60, used={p.key for p in first}, seed=1)
+    # Mostly pairs the code cannot already rule out, so the batch tests the judge.
+    assert sum(known_ineligible(p.profile, p.posting, AS_OF) for p in first) <= 18
+    again = make_batch(profiles, posts, 60, used={p.key for p in first}, seed=1, as_of=AS_OF)
     assert not {p.key for p in again} & {p.key for p in first}  # never reuses a pair
-    assert [p.key for p in make_batch(profiles, posts, 60, set(), seed=1)] == [p.key for p in first]
+    assert [p.key for p in make_batch(profiles, posts, 60, set(), seed=1, as_of=AS_OF)] == [
+        p.key for p in first
+    ]
     assert all(p.split == split_of(p.posting.id) for p in first)
     assert {split_of(f"post{i}") for i in range(50)} == {"dev", "test"}
 

@@ -154,3 +154,24 @@ Remaining held-out errors:
 
 Where the filter allows a posting but the judge gives 0, the human sided with the judge 6 of 7
 times. The judge catches eligibility rules the extractor misses.
+
+### After the first nightly run (2026-11-10)
+
+Three general rules came out of the first two fresh batches, each tested on dev-split pairs first:
+programs closed to ordinary undergraduates are a code check (advanced degree, veterans, one
+named school); a known but unrelated field (hardware, sales) caps fit at 1 and an adjacent one
+at 2; and batches hold at most 30% pairs the code already rules out.
+
+Judge vs reference labels (all AI labels; see "Who graded what"):
+
+| Set | Labels from | Pairs | Exact before | Exact after | Quadratic κ after |
+|---|---|---:|---:|---:|---:|
+| Tuning set (`grading_sheet.csv`) | browser agent | 100 | 0.80 | 0.78 | 0.80 |
+| First held-out (`heldout_sheet.csv`) | browser agent | 50 | 0.58 | 0.68 | 0.67 |
+| Agent batch, dev split | browser agent | 73 | 0.64 | 0.70 | 0.53 |
+| Agent batch, test split | browser agent | 27 | 0.59 | 0.63 | 0.63 |
+| Night batch, dev split | Claude Sonnet | 68 | 0.84 | 0.88 | 0.77 |
+| Night batch, test split | Claude Sonnet | 32 | 0.84 | 0.81 | 0.74 |
+
+The tuning set dropped slightly while both held-out sets rose, which is what replacing fitted
+behaviour with general rules should look like. The night-batch test split moved by one pair.
