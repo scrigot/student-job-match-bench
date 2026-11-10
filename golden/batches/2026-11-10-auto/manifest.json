@@ -1,0 +1,112 @@
+[
+ {
+  "profile": "p072",
+  "posting": "wd-hl-R3732-0e4ff7",
+  "split": "dev",
+  "group": "finance",
+  "track": "ib",
+  "judge": 0,
+  "judge_reason": "[c] Posting requires MBA enrollment; student is undergraduate.",
+  "reference": 0,
+  "reference_reason": "[c] IB M&A summer role with matching valuation and PowerPoint skills, but it is an MBA-level program in Los Angeles, not a preferred location."
+ },
+ {
+  "profile": "p178",
+  "posting": "gh-figma-6180005004",
+  "split": "dev",
+  "group": "other",
+  "track": "product",
+  "judge": 0,
+  "judge_reason": "[a] Student seeks a new-grad full-time role but posting is an internship.",
+  "reference": 0,
+  "reference_reason": "[a] Internship rather than new-grad, and a design role is off-track for a product student."
+ },
+ {
+  "profile": "p052",
+  "posting": "sp-ca124ec8-21c1-40d5-8aba-dea45cf0fe0d",
+  "split": "test",
+  "group": "other",
+  "track": "product",
+  "judge": 2,
+  "judge_reason": "Eligible but quant trading is an adjacent track to product; skill overlap is thin.",
+  "reference": 2,
+  "reference_reason": "Eligible and in Chicago, but quant trading is an adjacent track to product with only thin skill overlap (time series)."
+ },
+ {
+  "profile": "p106",
+  "posting": "lv-palantir-373367a9-3160-49d8-b7af-2efec062fad1",
+  "split": "dev",
+  "group": "other",
+  "track": "swe",
+  "judge": 0,
+  "judge_reason": "[d] Disqualified due to work authorization requiring US citizenship while student is a permanent resident.",
+  "reference": 3,
+  "reference_reason": "Eligible SWE internship with Java, TypeScript, Kubernetes, React overlap, but Seattle is not a preferred location."
+ },
+ {
+  "profile": "p036",
+  "posting": "gh-drweng-8014915",
+  "split": "dev",
+  "group": "other",
+  "track": "quant",
+  "judge": 0,
+  "judge_reason": "[code] grad year 2030 not in posting window [2027, 2028]",
+  "reference": 0,
+  "reference_reason": "[b] Quant research internship matches the student's track and skills, but the graduation window excludes a 2030 grad and the location is Singapore."
+ },
+ {
+  "profile": "p182",
+  "posting": "sp-2ffedaf1-5e57-4490-b50b-d2db5c9c049c",
+  "split": "test",
+  "group": "finance",
+  "track": "markets",
+  "judge": 2,
+  "judge_reason": "Eligible internship but on a data engineering track which is adjacent to markets; partial skill overlap with Python but missing market-specific skills.",
+  "reference": 2,
+  "reference_reason": "Eligible, but data engineering is an adjacent track to markets, with partial Python overlap and Seattle as a preferred location."
+ },
+ {
+  "profile": "p018",
+  "posting": "wd-raymondjames-R-0013354-7fd2ae",
+  "split": "dev",
+  "group": "finance",
+  "track": "ib",
+  "judge": 0,
+  "judge_reason": "[d] Disqualified due to explicit no visa sponsorship, student needs sponsorship.",
+  "reference": 0,
+  "reference_reason": "[c] Right track and level for IB M&A, but it requires a graduate degree, experience and no sponsorship."
+ },
+ {
+  "profile": "p141",
+  "posting": "wd-pipersandler-R-100655-552ab5",
+  "split": "dev",
+  "group": "finance",
+  "track": "ib",
+  "judge": 0,
+  "judge_reason": "[a] Role is an internship, but student seeks a new-grad full-time position.",
+  "reference": 0,
+  "reference_reason": "[a] Wrong stage (internship vs new-grad) and MBA-only; IB and SF location match but the role is an MBA summer associate."
+ },
+ {
+  "profile": "p030",
+  "posting": "gh-wehrtyou-7964062",
+  "split": "test",
+  "group": "other",
+  "track": "quant",
+  "judge": 3,
+  "judge_reason": "[capped: not a preferred location] Excellent fit: internship for intern, quant track, strong skill overlap in Python, machine learning, time series, and research focus.",
+  "reference": 3,
+  "reference_reason": "Quant research internship matching Python, ML and time series skills, but locations are NYC, London and Singapore rather than Austin or Seattle."
+ },
+ {
+  "profile": "p046",
+  "posting": "wd-hl-R3728-755ecc",
+  "split": "test",
+  "group": "finance",
+  "track": "ib",
+  "judge": 4,
+  "judge_reason": "Eligible and well-aligned internship for IB track with strong skill match and location fit.",
+  "reference": 4,
+  "reference_reason": "Eligible IB summer analyst role in Chicago for a 2029 grad, matching the student's modeling, Excel and pitch book skills."
+ }
+]
