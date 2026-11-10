@@ -96,6 +96,42 @@ def hard_check(profile: Profile, posting: Posting) -> str | None:
     return None
 
 
+# City aliases seen in posting locations. Keys are lowercase city names from the profiles.
+_CITY_ALIASES = {
+    "new york": ("new york", "nyc", "manhattan", "brooklyn"),
+    "san francisco": ("san francisco", "sf bay", "bay area"),
+    "chicago": ("chicago",),
+    "boston": ("boston", "cambridge, ma"),
+    "seattle": ("seattle", "bellevue"),
+    "austin": ("austin",),
+    "charlotte": ("charlotte",),
+}
+
+
+def location_match(profile: Profile, posting: Posting) -> bool | None:
+    """Is the posting in one of the student's preferred places? None when it has no location."""
+    loc = posting.location.lower()
+    if not loc.strip():
+        return None
+    for pref in profile.locations:
+        city = pref.split(",")[0].strip().lower()
+        if city == "remote":
+            if "remote" in loc:
+                return True
+            continue
+        if any(alias in loc for alias in _CITY_ALIASES.get(city, (city,))):
+            return True
+    return False
+
+
+def apply_fit_caps(profile: Profile, posting: Posting, j: Judgment) -> Judgment:
+    """Grading policy from the golden set: a 4 needs one of the student's preferred locations.
+    Every human 4 has one; 8 of 10 human 3s are right-track roles in other cities."""
+    if j.grade == 4 and location_match(profile, posting) is False:
+        return Judgment(3, f"[capped: not a preferred location] {j.reason}", j.cached)
+    return j
+
+
 class AzureJudge:
     """Chat completions on an Azure AI Foundry deployment through the OpenAI v1 route, with
     `model` set to the deployment name.
@@ -155,7 +191,7 @@ class AzureJudge:
             return Judgment(0, f"[code] {reason}")
         key = self._key(profile, posting)
         if key in self.cache:
-            return self.cache[key]
+            return apply_fit_caps(profile, posting, self.cache[key])
         if self.calls >= self.max_calls:
             raise BudgetExceeded(f"judge budget of {self.max_calls} uncached calls reached")
         prompt = render_prompt(profile, posting, self.as_of)
@@ -189,7 +225,7 @@ class AzureJudge:
         with self.cache_path.open("a") as f:
             f.write(json.dumps(row) + "\n")
         self.cache[key] = j
-        return j
+        return apply_fit_caps(profile, posting, j)
 
 
 class BudgetExceeded(RuntimeError):

@@ -112,3 +112,18 @@ def test_hard_check_grad_window():
     assert hard_check(student, make_posting(grad_years=[2028])) is not None  # outside window
     assert hard_check(student, make_posting(grad_years=[2028, 2029])) is None  # inside window
     assert hard_check(student, make_posting(grad_years=[])) is None  # not stated: never disqualify
+
+
+def test_location_match_and_fit_cap():
+    from sjmb.judge.judges import Judgment, apply_fit_caps, location_match
+
+    ny = make_profile(locations=["New York, NY", "Remote"])
+    assert location_match(ny, make_posting(location="NYC")) is True
+    assert location_match(ny, make_posting(location="Chicago; New York")) is True
+    assert location_match(ny, make_posting(location="Remote in USA")) is True
+    assert location_match(ny, make_posting(location="London, United Kingdom")) is False
+    assert location_match(ny, make_posting(location="")) is None  # unknown never caps
+    far = make_posting(location="Dublin")
+    assert apply_fit_caps(ny, far, Judgment(4, "great")).grade == 3
+    assert apply_fit_caps(ny, far, Judgment(2, "ok")).grade == 2  # only 4s are capped
+    assert apply_fit_caps(ny, make_posting(location="NYC"), Judgment(4, "great")).grade == 4
