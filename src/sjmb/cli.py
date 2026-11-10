@@ -243,3 +243,85 @@ def judge_one_main(argv: list[str] | None = None) -> None:
     print(f"your grade: {row.get('your_grade') or '-'}  {row.get('notes', '')[:160]}")
     print(f"judge ({judge.name}, rubric {RUBRIC_VERSION}): {answer}")
     print(f"prompt written to {path}  (copy it with: pbcopy < {path})")
+
+
+def blind_main(argv: list[str] | None = None) -> None:
+    """Copy a random sample of already-graded sheets with grades and notes removed, so a second
+    grader (a person) can grade the same pairs without seeing the first grader's answers."""
+    import random
+
+    from sjmb.golden import COLUMNS, RUBRIC_LINES
+
+    ap = argparse.ArgumentParser(prog="bench-blind", description=blind_main.__doc__)
+    ap.add_argument("sheets", type=Path, nargs="+", help="graded sheets to sample from")
+    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--n", type=int, default=40)
+    ap.add_argument(
+        "--skip-first", type=int, default=0, help="skip this many leading rows of the FIRST sheet"
+    )
+    ap.add_argument("--seed", type=int, default=3)
+    args = ap.parse_args(argv)
+    if args.out.exists():
+        raise SystemExit(f"{args.out} exists; refusing to overwrite a sheet that may hold grades")
+    pool = []
+    for i, sheet in enumerate(args.sheets):
+        rows = [r for r in read_sheet_rows(sheet) if (r.get("your_grade") or "").strip()]
+        pool += rows[args.skip_first :] if i == 0 else rows
+    rng = random.Random(args.seed)
+    by_grade: dict[str, list[dict]] = {}
+    for r in pool:
+        by_grade.setdefault(r["your_grade"].strip(), []).append(r)
+    picked: list[dict] = []
+    while len(picked) < min(args.n, len(pool)):  # round-robin over grades so each is covered
+        for g in sorted(by_grade):
+            if by_grade[g] and len(picked) < args.n:
+                picked.append(by_grade[g].pop(rng.randrange(len(by_grade[g]))))
+    rng.shuffle(picked)
+    import csv
+    import io
+
+    buf = io.StringIO()
+    buf.write("# Grade each pair 0-4 in your_grade, by hand, without looking at other grades.\n")
+    for line in RUBRIC_LINES:
+        buf.write(f"# {line}\n")
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(COLUMNS)
+    for i, r in enumerate(picked, 1):
+        w.writerow([i, r["profile_id"], r["posting_id"], r["student"], r["job"], "", ""])
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(buf.getvalue())
+    _log(f"wrote {len(picked)} blind pairs to {args.out}")
+
+
+def compare_main(argv: list[str] | None = None) -> None:
+    """Agreement between two graders' sheets, matched on (profile_id, posting_id)."""
+    from sjmb.golden import confusion_matrix
+    from sjmb.judge.agreement import cohen_kappa
+
+    ap = argparse.ArgumentParser(prog="bench-compare", description=compare_main.__doc__)
+    ap.add_argument("a", type=Path, help="first grader (rows of the table)")
+    ap.add_argument("b", type=Path, nargs="+", help="second grader: one or more sheets")
+    args = ap.parse_args(argv)
+    invalid: list[str] = []
+    a = {(r["profile_id"], r["posting_id"]): r["grade"] for r in read_golden(args.a, invalid)}
+    b: dict[tuple[str, str], int] = {}
+    for sheet in args.b:
+        b.update(
+            {(r["profile_id"], r["posting_id"]): r["grade"] for r in read_golden(sheet, invalid)}
+        )
+    for msg in invalid:
+        _log(f"skip {msg}")
+    keys = sorted(set(a) & set(b))
+    if not keys:
+        raise SystemExit("the sheets share no graded pairs")
+    x, y = [a[k] for k in keys], [b[k] for k in keys]
+    exact = sum(i == j for i, j in zip(x, y, strict=True)) / len(keys)
+    within1 = sum(abs(i - j) <= 1 for i, j in zip(x, y, strict=True)) / len(keys)
+    print(f"pairs graded by both: {len(keys)}")
+    print(f"exact agreement: {exact:.3f}")
+    print(f"within one grade: {within1:.3f}")
+    if len(set(x)) > 1 and len(set(y)) > 1:
+        print(f"cohen kappa (unweighted): {cohen_kappa(x, y):.3f}")
+        print(f"cohen kappa (quadratic): {cohen_kappa(x, y, weights='quadratic'):.3f}")
+    print("\nConfusion matrix (rows = first sheet, columns = second):")
+    print(confusion_matrix(x, y).replace("human \\ judge", "first \\ second"))
