@@ -6,6 +6,7 @@ with SJMB_CACHE_DIR). Only `sjmb/data/fixtures/sample_postings.json` is committe
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import random
@@ -179,10 +180,16 @@ def fetch_workday_board(client: httpx.Client, host: str, site: str, company: str
     return {"company": company, "tenant": tenant, "site": site, "jobs": jobs}
 
 
+def _short_hash(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()[:6]
+
+
 def parse_workday(payload: dict) -> list[Posting]:
     return [
         Posting(
-            id=f"wd-{payload['tenant']}-{j['id']}",
+            # One requisition can be posted at several URLs (one per office), so the id
+            # includes a short hash of the URL to stay unique.
+            id=f"wd-{payload['tenant']}-{j['id']}-{_short_hash(j.get('url', ''))}",
             source="workday",
             company=payload["company"],
             title=j.get("title", "").strip(),

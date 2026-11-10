@@ -170,8 +170,8 @@ def test_parse_workday():
             ],
         }
     )[0]
-    assert (p.id, p.source, p.company, p.description) == (
-        "wd-acme-R1",
+    assert p.id.startswith("wd-acme-R1-") and len(p.id) == len("wd-acme-R1-") + 6
+    assert (p.source, p.company, p.description) == (
         "workday",
         "Acme Bank",
         "Join our M&A team.",
