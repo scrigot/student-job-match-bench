@@ -144,7 +144,35 @@ def test_parsers_normalize_each_source():
 
 def test_fixture_is_small_and_mixed():
     posts = load_fixture()
-    assert 100 <= len(posts) <= 400
-    assert {p.source for p in posts} == {"greenhouse", "lever", "simplify"}
+    assert 100 <= len(posts) <= 500
+    assert {p.source for p in posts} == {"greenhouse", "lever", "simplify", "workday"}
     assert len({p.id for p in posts}) == len(posts)
     assert all(len(p.description) <= MAX_DESCRIPTION_CHARS for p in posts)
+
+
+def test_parse_workday():
+    from sjmb.data.loaders import parse_workday
+
+    p = parse_workday(
+        {
+            "company": "Acme Bank",
+            "tenant": "acme",
+            "site": "Campus",
+            "jobs": [
+                {
+                    "id": "R1",
+                    "title": "2027 Investment Banking Summer Analyst",
+                    "location": "New York",
+                    "posted": "2026-10-01",
+                    "url": "https://acme.wd1.myworkdayjobs.com/Campus/job/NY/x_R1",
+                    "description": "<p>Join our M&A team.</p>",
+                }
+            ],
+        }
+    )[0]
+    assert (p.id, p.source, p.company, p.description) == (
+        "wd-acme-R1",
+        "workday",
+        "Acme Bank",
+        "Join our M&A team.",
+    )

@@ -57,6 +57,24 @@ SIMPLIFY_LISTS = {
 }
 
 USER_AGENT = "student-job-match-bench/0.1 (research benchmark)"
+# Bank and boutique campus boards on Workday: (host, site, company). Same list KithNode seeds,
+# each a public career site. IB recruiting mostly lives here, not on Greenhouse or Lever.
+WORKDAY_BOARDS = [
+    ("hl.wd1", "Campus", "Houlihan Lokey"),
+    ("pjtpartners.wd1", "Students", "PJT Partners"),
+    ("guggenheim.wd1", "Guggenheim_Careers_Campus", "Guggenheim Securities"),
+    ("raymondjames.wd1", "RaymondJamesEarlyCareers", "Raymond James"),
+    ("leerink.wd5", "leerinkpartners", "Leerink Partners"),
+    ("pipersandler.wd501", "Piper_Sandler_Careers", "Piper Sandler"),
+    ("rbc.wd3", "rbcearlytalent1", "RBC"),
+    ("bmo.wd3", "Campus", "BMO"),
+    ("cibc.wd3", "campus", "CIBC"),
+    ("baird.wd1", "Careers", "Baird"),
+    ("mufgub.wd3", "MUFG-Careers", "MUFG"),
+]
+WORKDAY_MAX_POSTINGS = 60  # per board; each posting needs its own detail request
+WORKDAY_DELAY_S = 0.4  # be polite: these are employers' own career sites
+
 MAX_DESCRIPTION_CHARS = 8000  # eligibility rules often sit at the end
 
 
@@ -104,7 +122,77 @@ def fetch_all(max_age_hours: float = 24.0) -> dict[str, Path]:
                 out[key] = dest
             except httpx.HTTPError as e:
                 print(f"skip {key}: {e}")
+        for host, site, company in WORKDAY_BOARDS:
+            key = f"workday-{host.split('.')[0]}-{site}"
+            dest = raw / f"{key}.json"
+            try:
+                if not (
+                    dest.exists() and time.time() - dest.stat().st_mtime < max_age_hours * 3600
+                ):
+                    dest.write_text(json.dumps(fetch_workday_board(c, host, site, company)))
+                out[key] = dest
+            except (httpx.HTTPError, ValueError, KeyError) as e:
+                print(f"skip workday/{host}/{site}: {type(e).__name__}: {e}")
     return out
+
+
+def fetch_workday_board(client: httpx.Client, host: str, site: str, company: str) -> dict:
+    """List a public Workday career site and fetch each posting's description (capped)."""
+    tenant = host.split(".")[0]
+    base = f"https://{host}.myworkdayjobs.com"
+    api = f"{base}/wday/cxs/{tenant}/{site}"
+    listed: list[dict] = []
+    offset = 0
+    while len(listed) < WORKDAY_MAX_POSTINGS:
+        r = client.post(
+            f"{api}/jobs",
+            json={"limit": 20, "offset": offset, "searchText": "", "appliedFacets": {}},
+            headers={"Accept": "application/json"},
+        )
+        r.raise_for_status()
+        page = r.json().get("jobPostings", [])
+        if not page:
+            break
+        listed += page
+        offset += len(page)
+        time.sleep(WORKDAY_DELAY_S)
+    jobs = []
+    for item in listed[:WORKDAY_MAX_POSTINGS]:
+        path = item.get("externalPath", "")
+        if not path:
+            continue
+        d = client.get(f"{api}{path}", headers={"Accept": "application/json"})
+        time.sleep(WORKDAY_DELAY_S)
+        if d.status_code != 200:
+            continue
+        info = d.json().get("jobPostingInfo", {})
+        jobs.append(
+            {
+                "id": info.get("jobReqId") or path.rsplit("_", 1)[-1],
+                "title": info.get("title") or item.get("title", ""),
+                "location": info.get("location") or item.get("locationsText", ""),
+                "posted": info.get("startDate"),
+                "url": info.get("externalUrl") or f"{base}/{site}{path}",
+                "description": info.get("jobDescription", ""),
+            }
+        )
+    return {"company": company, "tenant": tenant, "site": site, "jobs": jobs}
+
+
+def parse_workday(payload: dict) -> list[Posting]:
+    return [
+        Posting(
+            id=f"wd-{payload['tenant']}-{j['id']}",
+            source="workday",
+            company=payload["company"],
+            title=j.get("title", "").strip(),
+            location=j.get("location", "") or "",
+            url=j.get("url", ""),
+            description=strip_html(j.get("description", ""))[:MAX_DESCRIPTION_CHARS],
+            posted_at=_iso(j.get("posted")),
+        )
+        for j in payload.get("jobs", [])
+    ]
 
 
 def _iso(ts: str | int | float | None) -> str | None:
@@ -211,6 +299,8 @@ def load_cache(paths: dict[str, Path] | None = None) -> list[Posting]:
             posts += parse_lever(key.removeprefix("lever-"), payload)
         elif key.startswith("simplify-"):
             posts += parse_simplify(key, payload)
+        elif key.startswith("workday-"):
+            posts += parse_workday(payload)
     return [enrich(p) for p in posts]
 
 
