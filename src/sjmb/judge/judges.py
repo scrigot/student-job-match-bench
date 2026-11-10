@@ -281,7 +281,7 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
-def render_prompt(profile: Profile, posting: Posting, as_of: date) -> str:
+def render_prompt(profile: Profile, posting: Posting, as_of: date, max_chars: int = 8000) -> str:
     return PROMPT.format(
         rubric=RUBRIC,
         as_of=as_of.isoformat(),
@@ -313,7 +313,7 @@ def render_prompt(profile: Profile, posting: Posting, as_of: date) -> str:
         posted_at=posting.posted_at or "unknown",
         deadline=posting.deadline or "not stated",
         active=posting.active,
-        description=posting.description[:8000],
+        description=posting.description[:max_chars],
     )
 
 
@@ -321,9 +321,14 @@ DISQUALIFIERS = set("abcdefg")
 _GRADE = re.compile(r'"grade"\s*:\s*([0-4])')
 
 
+_JSON_OBJECT = re.compile(r"\{.*\}", re.S)
+
+
 def parse_judgment(content: str) -> Judgment:
     try:
-        data = json.loads(content.strip().removeprefix("```json").removesuffix("```").strip())
+        # Tolerate a code fence or a sentence around the JSON object.
+        m = _JSON_OBJECT.search(content)
+        data = json.loads(m.group(0) if m else content)
         reason = str(data.get("reason", ""))[:300]
         if "fit" in data:  # v4+: code, not the model, turns a disqualifier into a 0
             fit = int(data["fit"])

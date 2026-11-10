@@ -96,7 +96,11 @@ def capture_urls(
                 browser = pw.chromium.launch(channel="chrome", headless=not headed)
             except PlaywrightError:
                 browser = pw.chromium.launch(headless=not headed)  # Playwright's own Chromium
-            page = browser.new_context(viewport={"width": 1280, "height": 1600}).new_page()
+            context = browser.new_context(
+                viewport={"width": 1280, "height": 1600}, service_workers="block"
+            )
+            context.route("**/*", _public_only_route())  # every request, redirect and subresource
+            page = context.new_page()
             for n, url in enumerate(todo, 1):
                 host = urlparse(url).hostname or ""
                 wait = HOST_DELAY_S - (time.time() - last_hit.get(host, 0))
@@ -109,13 +113,51 @@ def capture_urls(
     return [done[u] for u in urls]
 
 
+def _public_only_route():
+    """A Playwright route handler that aborts any request to a non-public address.
+
+    Posting URLs come from third-party lists, and a page can redirect or load subresources
+    anywhere, so the check runs on every request the browser makes. Host verdicts are cached
+    for the run. Residual risk: a host that re-resolves to a private address between this
+    check and the browser's own lookup (DNS rebinding) is not covered.
+    """
+    verdict: dict[str, bool] = {}
+
+    def handle(route) -> None:
+        req_url = route.request.url
+        if req_url.startswith(("data:", "blob:", "about:")):
+            route.continue_()
+            return
+        host = urlparse(req_url).hostname or ""
+        if host not in verdict:
+            try:
+                check_public_url(req_url)
+                verdict[host] = True
+            except UnsafeURL:
+                verdict[host] = False
+        if verdict[host]:
+            route.continue_()
+        else:
+            route.abort("blockedbyclient")
+
+    return handle
+
+
+def view_url(url: str) -> str:
+    """The page that shows the job description. Workable's `/apply` path is only the form."""
+    u = urlparse(url)
+    if (u.hostname or "").endswith("workable.com") and u.path.rstrip("/").endswith("/apply"):
+        return url.split("?")[0].rstrip("/").removesuffix("/apply")
+    return url
+
+
 def _capture_one(page, url: str, playwright_error) -> Capture:
     try:
         check_public_url(url)
     except UnsafeURL as e:
         return Capture(url, "unsafe", detail=str(e))
     try:
-        page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        page.goto(view_url(url), wait_until="domcontentloaded", timeout=45000)
         with contextlib.suppress(playwright_error):  # busy pages never go idle
             page.wait_for_load_state("networkidle", timeout=10000)
         check_public_url(page.url)  # a redirect must also land on a public host
