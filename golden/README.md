@@ -205,3 +205,11 @@ commit so it can be reverted alone.
 Decision (Sam, 2026-11-10): the class-year rule stays. A May 2028 graduate is not eligible for a
 posting that asks for "Dec. 2028 or Spring 2029" graduates, so on these pairs the rule is right
 and the reference is wrong.
+
+### Anthony's sheets (`golden/anthony/`, created 2026-11-10)
+
+Four blind sheets of 50 pairs for a second human grader, 200 pairs in all, none used before.
+`batch_1.csv` holds the 40 pairs of `human_check_sheet.csv` plus 10 new ones, so Sam's grades on
+that sheet give a 40-pair human-human comparison. Batches 2-4 are new pairs, half finance
+students, split 101 dev / 59 test by posting. Anthony grades without repo access, so he sees
+no AI or agent grades.
