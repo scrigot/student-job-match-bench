@@ -236,3 +236,13 @@ def test_results_markdown_has_difference_table(as_of):
     md = to_markdown(r)
     assert "difference vs bm25" in md and "95% CI" in md
     assert set(r.per_profile["bm25"]) == {p.id for p in profiles}
+
+
+def test_ltr_rerank_runs_offline(as_of):
+    from sjmb.ltr import FEATURES, run_ltr
+
+    profiles = generate_profiles(15, 3, as_of)
+    r = run_ltr(load_fixture(), profiles, StubJudge(as_of), as_of, encoder="lsa", folds=3)
+    assert len(r.baseline) == len(r.ltr) == 15
+    assert set(r.importance) == set(FEATURES)
+    assert "LambdaMART" in r.to_markdown() and "95% CI" in r.to_markdown()

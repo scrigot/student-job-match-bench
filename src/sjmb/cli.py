@@ -419,3 +419,30 @@ def nightly_main(argv: list[str] | None = None) -> None:
     )
     print(report.read_text())
     _log(f"wrote {report}")
+
+
+def ltr_main(argv: list[str] | None = None) -> None:
+    """Train a LambdaMART reranker on the judge's grades and score it by profile-level CV."""
+    from sjmb.ltr import run_ltr
+
+    load_dotenv()
+    ap = argparse.ArgumentParser(prog="bench-ltr", description=ltr_main.__doc__)
+    ap.add_argument("--judge", choices=["stub", "azure"], default="azure")
+    ap.add_argument("--encoder", choices=["auto", "st", "lsa", "azure"], default="auto")
+    ap.add_argument("--profiles", type=int, default=200)
+    ap.add_argument("--folds", type=int, default=5)
+    ap.add_argument("--max-judge-calls", type=int, default=500)
+    ap.add_argument("--as-of", type=date.fromisoformat, default=date(2026, 11, 9))
+    ap.add_argument("--out", type=Path, default=Path("results"))
+    ap.add_argument("--seed", type=int, default=42)
+    args = ap.parse_args(argv)
+
+    profiles = generate_profiles(args.profiles, seed=args.seed, as_of=args.as_of)
+    judge = make_judge(args.judge, args.as_of, args.max_judge_calls)
+    result = run_ltr(
+        load_fixture(), profiles, judge, args.as_of, args.encoder, args.folds, progress=_log
+    )
+    md = result.to_markdown()
+    args.out.mkdir(parents=True, exist_ok=True)
+    (args.out / "ltr.md").write_text(md)
+    print(md)
