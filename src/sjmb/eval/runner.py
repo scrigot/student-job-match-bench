@@ -14,7 +14,13 @@ from pathlib import Path
 import numpy as np
 
 from sjmb.azure import COST_WARN_CALLS
-from sjmb.eval.metrics import ndcg_at_k, poor_match_rate_at_k, recall_at_k, violation_rate_at_k
+from sjmb.eval.metrics import (
+    ndcg_at_k,
+    paired_bootstrap,
+    poor_match_rate_at_k,
+    recall_at_k,
+    violation_rate_at_k,
+)
 from sjmb.filters.eligibility import eligibility_mask
 from sjmb.judge.judges import Judge
 from sjmb.retrievers import BM25, Dense, Hybrid, make_encoder, top_k
@@ -39,6 +45,8 @@ class BenchResult:
     by_track: dict[str, dict[str, dict[str, float]]]
     by_class: dict[str, dict[str, dict[str, float]]]
     meta: dict = field(default_factory=dict)
+    # system -> profile id -> metric -> value; kept so differences can carry a CI.
+    per_profile: dict[str, dict[str, dict[str, float]]] = field(default_factory=dict)
 
 
 def build_ladder(postings: list[Posting], encoder: str | Encoder = "auto") -> list[System]:
@@ -186,6 +194,7 @@ def run_bench(
             "judged_pairs": pool_size,
             "unparsed_judgments": unparsed,
         },
+        per_profile=per_profile,
     )
     if out_dir is not None:
         write_outputs(result, judgments, out_dir)
@@ -207,6 +216,26 @@ def results_table(rows: dict[str, dict[str, float]], metrics: tuple[str, ...] = 
     return "\n".join([head, sep, *body])
 
 
+def differences_table(r: BenchResult, base: str | None = None, metric: str = "ndcg@10") -> str:
+    """Each system minus the baseline on `metric`, with a paired bootstrap 95% CI over profiles.
+    A CI that excludes 0 is a difference this set of profiles supports."""
+    base = base or r.systems[0]
+    ids = sorted(r.per_profile[base])
+    a = [r.per_profile[base][i][metric] for i in ids]
+    lines = [
+        f"### {metric} difference vs {base} (paired bootstrap, 95% CI over {len(ids)} profiles)",
+        "",
+        "| system | difference | 95% CI |",
+        "|---|---:|---|",
+    ]
+    for name in r.systems:
+        if name == base:
+            continue
+        mean, lo, hi = paired_bootstrap(a, [r.per_profile[name][i][metric] for i in ids])
+        lines.append(f"| {name} | {mean:+.3f} | [{lo:+.3f}, {hi:+.3f}] |")
+    return "\n".join(lines)
+
+
 def to_markdown(r: BenchResult) -> str:
     m = r.meta
     parts = [
@@ -224,6 +253,8 @@ def to_markdown(r: BenchResult) -> str:
             "",
         ]
     parts += ["## Overall", "", results_table(r.overall), ""]
+    if r.per_profile and len(r.systems) > 1:
+        parts += [differences_table(r), ""]
     short = ("ndcg@10", "pmr@10", "elig_viol@10")
     for title, slices in (("By track", r.by_track), ("By class year", r.by_class)):
         parts += [f"## {title}", ""]
@@ -246,7 +277,13 @@ def write_outputs(r: BenchResult, judgments: list[dict], out_dir: Path) -> None:
             return {k: clean(v) for k, v in x.items()}
         return None if isinstance(x, float) and math.isnan(x) else x
 
-    payload = {"meta": r.meta, "overall": r.overall, "by_track": r.by_track, "by_class": r.by_class}
+    payload = {
+        "meta": r.meta,
+        "overall": r.overall,
+        "by_track": r.by_track,
+        "by_class": r.by_class,
+        "per_profile": r.per_profile,
+    }
     (out_dir / "results.json").write_text(json.dumps(clean(payload), indent=1))
     with (out_dir / "judgments.jsonl").open("w") as f:
         for j in judgments:

@@ -42,3 +42,22 @@ def violation_rate_at_k(ranked: list[str], ineligible: set[str], k: int = 10) ->
     if not top:
         return math.nan
     return sum(1 for d in top if d in ineligible) / len(top)
+
+
+def paired_bootstrap(
+    a: list[float], b: list[float], n_resamples: int = 10000, seed: int = 0
+) -> tuple[float, float, float]:
+    """Mean of b - a over paired items (one per profile) and its 95% percentile bootstrap CI.
+
+    Resamples profiles with replacement, so the interval reflects how much the result depends
+    on which students happened to be in the set."""
+    import numpy as np
+
+    d = np.asarray(b, dtype=float) - np.asarray(a, dtype=float)
+    d = d[~np.isnan(d)]
+    if len(d) == 0:
+        return math.nan, math.nan, math.nan
+    rng = np.random.default_rng(seed)
+    means = d[rng.integers(0, len(d), size=(n_resamples, len(d)))].mean(axis=1)
+    lo, hi = np.percentile(means, [2.5, 97.5])
+    return float(d.mean()), float(lo), float(hi)

@@ -217,3 +217,22 @@ def test_markets_student_at_trading_firm_and_december_window():
     # A December graduation window excludes the class that graduates the spring before.
     bmo = make_posting(grad_years=[2029], title="UT @ Austin Summer 2028 Internship")
     assert "grad year 2028" in hard_check(markets, bmo)
+
+
+def test_paired_bootstrap_ci():
+    from sjmb.eval.metrics import paired_bootstrap
+
+    mean, lo, hi = paired_bootstrap([0.0] * 50, [0.1] * 50)
+    assert abs(mean - 0.1) < 1e-9 and abs(lo - 0.1) < 1e-9 and abs(hi - 0.1) < 1e-9
+    a = [0.5, 0.2, 0.9, 0.4] * 10
+    b = [x + (0.05 if i % 2 else -0.05) for i, x in enumerate(a)]
+    mean, lo, hi = paired_bootstrap(a, b)
+    assert lo < 0 < hi  # a noisy zero difference straddles 0
+
+
+def test_results_markdown_has_difference_table(as_of):
+    profiles = generate_profiles(6, 1, as_of)
+    r = run_bench(load_fixture(), profiles, StubJudge(as_of), as_of, encoder="lsa", pool_depth=10)
+    md = to_markdown(r)
+    assert "difference vs bm25" in md and "95% CI" in md
+    assert set(r.per_profile["bm25"]) == {p.id for p in profiles}
