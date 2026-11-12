@@ -213,3 +213,9 @@ Four blind sheets of 50 pairs for a second human grader, 200 pairs in all, none 
 that sheet give a 40-pair human-human comparison. Batches 2-4 are new pairs, half finance
 students, split 101 dev / 59 test by posting. Anthony grades without repo access, so he sees
 no AI or agent grades.
+
+### Held-out sheet, rechecked 2026-11-12
+
+Current judge (`c4bcbe9`) on the 50 held-out pairs: 0.62 exact, quadratic κ 0.657 (was 0.68 /
+0.670 at `93803e3`). The drop comes from the trading-firm rule (`0db1014`): three pairs the
+reference graded 1 now get 2. The class-year rule changed none of these 50 grades.
