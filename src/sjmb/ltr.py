@@ -88,12 +88,13 @@ class LtrResult:
     profiles: int
     folds: int
     baseline: list[float]  # NDCG@10 per profile, hybrid-rrf + eligibility
+    rules: list[float]  # the same, with the restricted-program check also applied
     ltr: list[float]  # NDCG@10 per profile, LambdaMART rerank
     new_judgments: int
     importance: dict[str, float]
 
     def to_markdown(self) -> str:
-        mean, lo, hi = paired_bootstrap(self.baseline, self.ltr)
+        mean, lo, hi = paired_bootstrap(self.rules, self.ltr)
         rows = sorted(self.importance.items(), key=lambda kv: -kv[1])
         total = sum(self.importance.values()) or 1.0
         return "\n".join(
@@ -102,15 +103,16 @@ class LtrResult:
                 "",
                 f"{self.profiles} profiles, {self.folds}-fold cross-validation by profile, "
                 f"reranking the eligible hybrid top-{CANDIDATES}. "
-                f"{self.new_judgments} new judge calls to grade the reranker's new top-10.",
+                f"{self.new_judgments} new judge calls to grade the new top-10s.",
                 "",
                 "| system | ndcg@10 |",
                 "|---|---:|",
                 f"| hybrid-rrf + eligibility | {np.mean(self.baseline):.3f} |",
+                f"| + restricted-program check | {np.mean(self.rules):.3f} |",
                 f"| + LambdaMART rerank | {np.mean(self.ltr):.3f} |",
                 "",
-                f"Difference: {mean:+.3f}, 95% CI [{lo:+.3f}, {hi:+.3f}] (paired bootstrap over "
-                "profiles).",
+                f"LambdaMART vs the rule baseline: {mean:+.3f}, "
+                f"95% CI [{lo:+.3f}, {hi:+.3f}] (paired bootstrap over profiles).",
                 "",
                 "Feature importance (share of total gain):",
                 "",
@@ -189,29 +191,42 @@ def run_ltr(
                 picks[p.id] = [cands[p.id][k] for k in ranked]
         progress(f"fold {f + 1}/{folds} trained on {len(group)} profiles")
 
-    # Judge whatever the reranker put in its top 10 that nobody has graded yet.
+    # The fair rule baseline: the same candidates with the restricted-program check applied,
+    # since the reranker gets that check as a feature and the eligibility filter lacks it.
+    rules = {
+        p.id: [
+            i
+            for i in cands[p.id]
+            if restriction(postings[i].title, postings[i].description) is None
+        ]
+        for p in profiles
+    }
+    # Judge whatever either new list put in its top 10 that nobody has graded yet.
+    tops = {p.id: set(picks[p.id][:10]) | set(rules[p.id][:10]) for p in profiles}
     todo = [
         (p, postings[i])
         for p in profiles
-        for i in picks[p.id][:10]
+        for i in tops[p.id]
         if not (hasattr(judge, "is_cached") and judge.is_cached(p, postings[i]))
     ]
     calls_before = judge.calls
     preflight(judge, todo, progress)
-    base_scores, ltr_scores = [], []
+    base_scores, rule_scores, ltr_scores = [], [], []
     for p in profiles:
         qrels: dict[str, int] = {}
-        for i in set(cands[p.id][:10]) | set(picks[p.id][:10]) | set(cands[p.id]):
-            if i in picks[p.id][:10] or labels[p.id][cands[p.id].index(i)] is not None:
+        for k, i in enumerate(cands[p.id]):
+            if i in tops[p.id] or labels[p.id][k] is not None:
                 g = judge.grade(p, postings[i]).grade
                 if g is not None:
                     qrels[postings[i].id] = g
         base_scores.append(ndcg_at_k([postings[i].id for i in cands[p.id]], qrels, 10))
+        rule_scores.append(ndcg_at_k([postings[i].id for i in rules[p.id]], qrels, 10))
         ltr_scores.append(ndcg_at_k([postings[i].id for i in picks[p.id]], qrels, 10))
     return LtrResult(
         profiles=len(profiles),
         folds=folds,
         baseline=base_scores,
+        rules=rule_scores,
         ltr=ltr_scores,
         new_judgments=judge.calls - calls_before,
         importance=dict(zip(FEATURES, gain.tolist(), strict=True)),
