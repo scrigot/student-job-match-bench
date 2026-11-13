@@ -65,30 +65,63 @@ Judging uses **pooling**: each profile's pool is the union of every system's top
 
 ## Results
 
-> Numbers are left blank until they are measured with the Azure judge on the full cache and the
-> judge is validated against a human golden set. `--judge stub` results only test the pipeline:
-> the stub grades with the same rules as the eligibility filter, so it flatters rung 4.
+Measured 2026-11-12 on the sample fixture: 352 postings, 200 synthetic profiles, pool depth 10,
+4,110 judged pairs, judge `azure:gpt-4.1-mini` (rubric v5 plus code checks). Grades come from the
+LLM judge, not from people; see "Judge card" for how far the judge has been validated.
 
-| System | NDCG@10 | Recall@50 | PMR@10 | Elig. viol.@10 | ms/query |
-|---|---:|---:|---:|---:|---:|
-| BM25 | | | | | |
-| Dense | | | | | |
-| Hybrid RRF | | | | | |
-| BM25 + eligibility | | | | | |
-| Hybrid RRF + eligibility | | | | | |
+| System | NDCG@10 | Recall@50 | PMR@10 | Elig. viol.@10 |
+|---|---:|---:|---:|---:|
+| BM25 | 0.280 | 0.953 | 0.782 | 52.8% |
+| Dense (LSA, 128 dims) | 0.329 | 0.926 | 0.775 | 50.7% |
+| Hybrid RRF | 0.289 | 0.974 | 0.781 | 51.9% |
+| BM25 + eligibility | 0.572 | 0.989 | 0.561 | 0% |
+| Hybrid RRF + eligibility | 0.591 | 0.994 | 0.555 | 0% |
 
-Judge: _ · κ (quadratic) vs. golden set: _ · profiles: _ · postings: _
+NDCG@10 difference from BM25, paired bootstrap 95% CI over the 200 profiles:
+
+| System | Difference | 95% CI |
+|---|---:|---|
+| Dense (LSA) | +0.048 | [+0.019, +0.078] |
+| Hybrid RRF | +0.008 | [−0.009, +0.025] |
+| BM25 + eligibility | +0.292 | [+0.267, +0.317] |
+| Hybrid RRF + eligibility | +0.311 | [+0.283, +0.338] |
+
+What this says: text matching alone puts an ineligible job in about half of every top 10, and
+the eligibility filter is worth far more than the choice of retriever. Hybrid fusion does not
+beat BM25 at this size. Part of the filter's gain is by construction, because the judge and the
+filter share the graduation-window code; against the 450 AI-graded reference pairs, 173 of the
+184 pairs the filter rules out were graded 0 (94%).
+
+### Learned reranker (LambdaMART)
+
+`bench-ltr` trains a LightGBM LambdaMART model on the judge's grades from 17 cheap features
+(retrieval scores, track and location match, level, skill overlap, restricted-program flag,
+description length) and reranks the eligible hybrid top 50. It needs no LLM call at query time.
+Evaluated with 5-fold cross-validation by profile; each list's new top 10 is judged before
+scoring, so every system is scored on the same, larger set of judgments (which is why the
+baseline is lower here than in the table above).
+
+| System | NDCG@10 |
+|---|---:|
+| Hybrid RRF + eligibility | 0.399 |
+| + restricted-program rule | 0.484 |
+| + LambdaMART rerank | 0.868 |
+
+LambdaMART vs the rule baseline: +0.384, 95% CI [+0.360, +0.407]. The largest features by gain
+are the restricted-program flag (34%), description length (15%) and track match (15%). Caveat:
+the model learns from the same judge that scores it, so this measures how well a cheap model
+reproduces the judge, including the judge's code-enforced track caps, not agreement with people.
 
 ## Data card
 
 | | |
 |---|---|
 | **Postings** | Public Greenhouse boards (26 firms), Lever boards (4 firms) and Workday campus boards of 11 banks, across trading, asset management, banking, consulting and tech, plus the SimplifyJobs Summer 2027 internship and new-grad lists. Board tokens are in `src/sjmb/data/loaders.py`. |
-| **Sample fixture** | `src/sjmb/data/fixtures/sample_postings.json`: 230 postings (4 per board plus a track-stratified Simplify slice), descriptions kept up to 4,000 characters so the judge reads the full posting. The only data in git. |
+| **Sample fixture** | `src/sjmb/data/fixtures/sample_postings.json`: 352 postings (board samples, a track-stratified Simplify slice and 122 bank campus postings), descriptions kept up to 8,000 characters so the judge reads the full posting. The only data in git. |
 | **Extraction** | Rule-based at ingest (`sjmb/data/extract.py`): track, internship vs new-grad vs experienced, eligible grad years, sponsorship, terms. Greenhouse supplies deadlines; Simplify supplies sponsorship and active status. |
 | **Profiles** | 200 synthetic students from a seeded generator, stratified over 7 tracks × 4 class years × 3 work-authorization statuses. No real people. |
 | **Eligibility policy** | Each student seeks one level: seniors are matched to new-grad roles, everyone else to internships. Unstated fields never exclude a student. `us_persons` (citizens or permanent residents) is separated from `citizens_only`. |
-| **Known gaps** | Investment banking is nearly absent: most banks post through Workday, not these boards. Rule extraction misses grad years stated in unusual ways and misreads some titles. Simplify rows have no description text, so lexical methods see only title, company and category. |
+| **Known gaps** | Rule extraction misses grad years stated in unusual ways and misreads some titles. Simplify rows have no description text, so lexical methods see only title, company and category. |
 
 ## Judge card
 
@@ -103,6 +136,10 @@ Judge: _ · κ (quadratic) vs. golden set: _ · profiles: _ · postings: _
 - **Validation**: a 100-pair blind golden set in [golden/](golden/README.md), stratified to
   include filter–judge disagreements. `bench-kappa` reports exact agreement, unweighted and
   quadratic-weighted Cohen's κ, a confusion matrix and the disagreement breakdown.
+- **Where it stands (2026-11-12)**: on 50 held-out pairs graded by an AI reference grader, the
+  judge agrees exactly on 62% (quadratic κ 0.66), up from 44% (0.45) before tuning. No
+  human-validated number exists yet; blind human sheets are in `golden/human_check_sheet.csv`
+  and `golden/anthony/`.
 
 ## Layout
 
