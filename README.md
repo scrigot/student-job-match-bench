@@ -92,6 +92,24 @@ beat BM25 at this size. Part of the filter's gain is by construction, because th
 filter share the graduation-window code; against the 450 AI-graded reference pairs, 173 of the
 184 pairs the filter rules out were graded 0 (94%).
 
+### Neural embeddings
+
+The same 200 profiles with Azure `text-embedding-3-small` as the dense retriever
+(`--encoder azure`). The pool changes with the retrievers, so compare systems within a table,
+not across tables.
+
+| System | NDCG@10 | Recall@50 | PMR@10 | Elig. viol.@10 |
+|---|---:|---:|---:|---:|
+| BM25 | 0.235 | 0.791 | 0.782 | 52.8% |
+| Dense (text-embedding-3-small) | 0.471 | 0.876 | 0.621 | 38.7% |
+| Hybrid RRF | 0.375 | 0.947 | 0.684 | 46.5% |
+| BM25 + eligibility | 0.488 | 0.912 | 0.561 | 0% |
+| Hybrid RRF + eligibility | 0.628 | 0.994 | 0.461 | 0% |
+
+Difference from BM25 (95% CI over profiles): dense +0.237 [+0.204, +0.270], hybrid +0.140
+[+0.118, +0.162], hybrid + eligibility +0.393 [+0.364, +0.423]. With neural embeddings the
+retriever matters as much as the filter, unlike with LSA.
+
 ### Learned reranker (LambdaMART)
 
 `bench-ltr` trains a LightGBM LambdaMART model on the judge's grades from 17 cheap features
