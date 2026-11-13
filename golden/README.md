@@ -219,3 +219,7 @@ no AI or agent grades.
 Current judge (`c4bcbe9`) on the 50 held-out pairs: 0.62 exact, quadratic κ 0.657 (was 0.68 /
 0.670 at `93803e3`). The drop comes from the trading-firm rule (`0db1014`): three pairs the
 reference graded 1 now get 2. The class-year rule changed none of these 50 grades.
+
+Before any grading (2026-11-13), the "auto-extracted grad years; work auth" field was removed
+from `human_check_sheet.csv` and the four `anthony/` sheets. It is the extractor's guess, not the
+employer's text, and a human grader should read the posting rather than our reading of it.
