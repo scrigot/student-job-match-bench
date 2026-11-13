@@ -242,6 +242,9 @@ class AzureJudge:
         return hashlib.sha256(blob.encode()).hexdigest()
 
     def is_cached(self, profile: Profile, posting: Posting) -> bool:
+        """True when grading this pair costs nothing: cached, or decided by the code checks."""
+        if hard_check(profile, posting) is not None:
+            return True
         return self._key(profile, posting) in self.cache
 
     def estimate_cost(self, pairs: list[tuple[Profile, Posting]]) -> float:

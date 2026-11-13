@@ -125,3 +125,12 @@ def test_hard_check_runs_before_the_cache(azure_env):
     j = AzureJudge(AS_OF, max_calls=10, llm=llm)
     prof, post = make_profile(grad_year=2029), make_posting(grad_years=[2028])
     assert j.grade(prof, post).grade == 0 and llm.chat_calls == 0  # code decided, no call
+
+
+def test_code_decided_pairs_count_as_free(azure_env):
+    j = AzureJudge(AS_OF, max_calls=0, llm=FakeLLM())
+    prof = make_profile(grad_year=2028)
+    closed = make_posting(grad_years=[2030])  # the code rules it out; no model call
+    assert j.is_cached(prof, closed)
+    preflight(j, [(prof, closed)], lambda _: None)  # no budget error at max_calls=0
+    assert not j.is_cached(prof, make_posting())
