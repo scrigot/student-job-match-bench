@@ -446,3 +446,23 @@ def ltr_main(argv: list[str] | None = None) -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "ltr.md").write_text(md)
     print(md)
+
+
+def select_main(argv: list[str] | None = None) -> None:
+    """Model selection for the reranker from cached judge grades: no new judge calls."""
+    from sjmb.judge.judges import AzureJudge
+    from sjmb.model_selection import build_groups, run, save
+
+    load_dotenv()
+    ap = argparse.ArgumentParser(prog="bench-select", description=select_main.__doc__)
+    ap.add_argument("--profiles", type=int, default=200)
+    ap.add_argument("--as-of", type=date.fromisoformat, default=date(2026, 11, 9))
+    ap.add_argument("--out", type=Path, default=Path("results/model_selection.json"))
+    args = ap.parse_args(argv)
+    judge = AzureJudge(args.as_of, max_calls=0)  # cached grades only
+    profiles = generate_profiles(args.profiles, seed=42, as_of=args.as_of)
+    groups = build_groups(load_fixture(), profiles, judge, args.as_of)
+    _log(f"{len(groups)} profiles, {sum(len(g.y) for g in groups)} judged pairs")
+    result = run(groups, progress=_log)
+    save(result, args.out)
+    _log(f"wrote {args.out}")

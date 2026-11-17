@@ -30,6 +30,7 @@ bench-capture = "sjmb.cli:capture_main"
 bench-nightly = "sjmb.cli:nightly_main"
 bench-blind = "sjmb.cli:blind_main"
 bench-ltr = "sjmb.cli:ltr_main"
+bench-select = "sjmb.cli:select_main"
 
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.6"]

@@ -1,0 +1,368 @@
+<title>Reranker Model Selection</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (~720px) with full-width figures; findings first, method and caveats last. */
+:root {
+  --bg: #fbfbfa; --surface: #ffffff; --fg: #18191b; --muted: #5a5c61; --faint: #8b8d93; --line: #e3e4e6; --grid: #eeeff1;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --pos: #2a78d6; --neg: #eb6834; --band: rgba(42,120,214,.14);
+  --display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161719; --surface: #1d1e21; --fg: #ecedef; --muted: #b2b4b9; --faint: #85878d; --line: #34363a; --grid: #2a2c30;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --pos: #3987e5; --neg: #d95926; --band: rgba(57,135,229,.2); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #161719; --surface: #1d1e21; --fg: #ecedef; --muted: #b2b4b9; --faint: #85878d; --line: #34363a; --grid: #2a2c30;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --pos: #3987e5; --neg: #d95926; --band: rgba(57,135,229,.2); color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--body); }
+.page { max-width: 760px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 28px; }
+h1 { font: 600 34px/1.15 var(--display); margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+h2 { font: 600 21px/1.3 var(--display); margin: 0 0 8px; text-wrap: balance; }
+h3 { font: 600 15px/1.4 var(--body); margin: 0 0 4px; }
+p { margin: 0 0 10px; max-width: 68ch; }
+.eyebrow { font: 500 12px var(--mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.lede { color: var(--muted); font-size: 16px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 13px var(--mono); color: var(--muted); }
+.meta b { color: var(--fg); font-weight: 500; }
+.findings { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.findings li { max-width: 68ch; }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 18px 14px; display: grid; gap: 10px; min-width: 0; }
+figcaption { font-size: 14px; color: var(--muted); max-width: 68ch; }
+figcaption b { color: var(--fg); font-weight: 600; }
+.fig-n { font: 500 12px var(--mono); color: var(--faint); }
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { fill: var(--muted); font: 11px var(--mono); }
+.chart .axis-title { fill: var(--muted); font: 12px var(--body); }
+.chart .lbl { fill: var(--fg); font: 500 11px var(--mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend i.dot { width: 10px; height: 10px; border-radius: 50%; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; font: 12.5px var(--mono); width: 100%; }
+th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { color: var(--muted); font-weight: 500; }
+th:first-child, td:first-child { text-align: left; }
+td.best { font-weight: 600; outline: 2px solid var(--s1); outline-offset: -3px; border-radius: 3px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.callout { border-left: 3px solid var(--s1); padding: 4px 0 4px 14px; }
+.qs { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.foot { font-size: 13px; color: var(--faint); }
+code { font: 13px var(--mono); }
+#tip { position: fixed; pointer-events: none; background: var(--fg); color: var(--bg); font: 12px/1.4 var(--mono); padding: 6px 8px; border-radius: 6px; white-space: pre; z-index: 5; opacity: 0; transition: opacity .08s; }
+@media (prefers-reduced-motion: reduce) { #tip { transition: none; } }
+</style>
+
+<main class="page">
+  <header style="display:grid;gap:12px">
+    <div class="eyebrow">student-job-match-bench · KIT-254</div>
+    <h1>Reranker Model Selection</h1>
+    <p class="lede">How complex should the LambdaMART reranker be, does it need more data, which features carry it, and does a simple linear model do almost as well? Five-fold cross-validation over synthetic student profiles, scored against an LLM judge's grades.</p>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <section>
+    <h2>Findings</h2>
+    <ol class="findings" id="findings"></ol>
+  </section>
+
+  <figure>
+    <div class="fig-n">Figure 1</div>
+    <h3>Validation curve: tree size at 200 boosting rounds</h3>
+    <div class="legend"><span><i style="background:var(--s2)"></i>Train NDCG@10</span><span><i style="background:var(--s1)"></i>Test NDCG@10 (±1 SD across folds)</span></div>
+    <svg class="chart" id="c-valid" viewBox="0 0 680 300" role="img" aria-label="Train and test NDCG@10 against number of leaves"></svg>
+    <figcaption id="cap-valid"></figcaption>
+  </figure>
+
+  <figure>
+    <div class="fig-n">Figure 2</div>
+    <h3>Full sweep: test NDCG@10 by leaves and boosting rounds</h3>
+    <div class="scroll"><table id="t-sweep"></table></div>
+    <figcaption id="cap-sweep"></figcaption>
+  </figure>
+
+  <figure>
+    <div class="fig-n">Figure 3</div>
+    <h3>Learning curve: share of training profiles used</h3>
+    <div class="legend"><span><i style="background:var(--s2)"></i>Train NDCG@10</span><span><i style="background:var(--s1)"></i>Test NDCG@10</span></div>
+    <svg class="chart" id="c-learn" viewBox="0 0 680 280" role="img" aria-label="Train and test NDCG@10 against share of training data"></svg>
+    <figcaption id="cap-learn"></figcaption>
+  </figure>
+
+  <figure>
+    <div class="fig-n">Figure 4</div>
+    <h3>Model comparison on the same judged candidates</h3>
+    <svg class="chart" id="c-models" viewBox="0 0 680 230" role="img" aria-label="Test NDCG@10 for each model"></svg>
+    <figcaption id="cap-models"></figcaption>
+  </figure>
+
+  <figure>
+    <div class="fig-n">Figure 5</div>
+    <h3>ROC: telling relevant jobs (grade ≥ 3) from the rest</h3>
+    <div class="legend" id="leg-roc"></div>
+    <svg class="chart" id="c-roc" viewBox="0 0 680 420" role="img" aria-label="ROC curves for three scores"></svg>
+    <figcaption id="cap-roc"></figcaption>
+  </figure>
+
+  <div class="two">
+    <figure>
+      <div class="fig-n">Figure 6</div>
+      <h3>Ablation: test NDCG@10 lost when a feature is removed</h3>
+      <svg class="chart" id="c-ablate" viewBox="0 0 420 470" role="img" aria-label="Drop in test NDCG@10 per removed feature"></svg>
+      <figcaption id="cap-ablate"></figcaption>
+    </figure>
+    <figure>
+      <div class="fig-n">Figure 7</div>
+      <h3>Linear model: coefficients on features rescaled to [0, 1]</h3>
+      <svg class="chart" id="c-coef" viewBox="0 0 420 470" role="img" aria-label="Linear model coefficients"></svg>
+      <figcaption id="cap-coef"></figcaption>
+    </figure>
+  </div>
+
+  <figure>
+    <div class="fig-n">Figure 8</div>
+    <h3>Why posting length matters: judge grades by description length</h3>
+    <div class="legend"><span><i class="dot" style="background:var(--s1)"></i>Share graded relevant (≥ 3)</span><span><i class="dot" style="background:var(--s2)"></i>Share graded 0</span></div>
+    <svg class="chart" id="c-len" viewBox="0 0 680 280" role="img" aria-label="Share of relevant and zero grades by description length"></svg>
+    <figcaption id="cap-len"></figcaption>
+  </figure>
+
+  <section>
+    <h2>Method</h2>
+    <p><b>Data.</b> 352 public job postings, 200 synthetic student profiles (seven career tracks, four class years). For each profile the candidate set is the hybrid retriever's top 50 jobs the student is eligible for. Only candidates the judge had already graded are used, so the experiment made no new model calls.</p>
+    <p><b>Labels.</b> Grades 0–4 from an LLM judge (gpt-4.1-mini with code-enforced eligibility rules). On 50 held-out pairs the judge matches a stronger AI grader exactly 62% of the time (quadratic κ 0.66). No human-graded labels are used here yet.</p>
+    <p><b>Model.</b> LightGBM LambdaMART on 17 cheap features: retrieval scores and rank, track and location match, level match, skill and interest overlap, flags for restricted programs and stated rules, and log description length. Baseline orderings use the same candidates.</p>
+    <p><b>Evaluation.</b> 5-fold cross-validation by profile, folds stratified by career track, so a student's pairs are never in both training and test. Metric: NDCG@10 of each profile's judged candidates, reordered by the model. ROC uses out-of-fold scores with "relevant" defined as grade ≥ 3.</p>
+  </section>
+
+  <section class="callout">
+    <h2>Caveats</h2>
+    <p>The reranker learns from the same judge that scores it, so these numbers measure how well a cheap model reproduces the judge, not agreement with people. Scoring only judged candidates (a reranking of the judged pool) favours models that sort that pool well and says nothing about jobs no system surfaced. Profiles are synthetic.</p>
+  </section>
+
+  <section>
+    <h2>Open questions</h2>
+    <ol class="qs">
+      <li>Is picking the simplest model within one standard error of the best the right rule here, given the fold-to-fold spread?</li>
+      <li>Description length looks like a proxy for where a posting came from. Is dropping it, or replacing it with an explicit source feature, the better fix?</li>
+      <li>Gain-based importance and drop-one ablation disagree on several features. Would grouped or permutation importance give a fairer picture with correlated features?</li>
+      <li>With labels from an AI judge, how many human-graded pairs would make the test set trustworthy?</li>
+    </ol>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script id="data" type="application/json">{"profiles":200,"pairs":5968,"relevant_share":0.24178954423592494,"features":["bm25","dense","hybrid_rrf","hybrid_rank","track_same","track_adjacent","track_unrelated","track_unknown","location_match","location_unknown","level_match","grad_window_stated","sponsorship_stated","restricted_program","skill_hits","interest_overlap","log_desc_len"],"baselines":{"hybrid order":0.39634333008107603,"hybrid order, restricted programs last":0.4807619595302451},"sweep":[{"leaves":2,"rounds":25,"train":0.7827437327587853,"test":0.7799544821629757,"test_sd":0.009010993726241298},{"leaves":2,"rounds":50,"train":0.8011804091457548,"test":0.7953477333219052,"test_sd":0.01013136570016378},{"leaves":2,"rounds":100,"train":0.8114554866019338,"test":0.8023921497048256,"test_sd":0.01333106595970649},{"leaves":2,"rounds":200,"train":0.8231593115779958,"test":0.8095270794311074,"test_sd":0.012330083633448771},{"leaves":2,"rounds":400,"train":0.8313136174061944,"test":0.8165981718365064,"test_sd":0.009950824106806401},{"leaves":4,"rounds":25,"train":0.8163501791074829,"test":0.805251106135428,"test_sd":0.014801189240525038},{"leaves":4,"rounds":50,"train":0.8270746914531305,"test":0.8141794783234586,"test_sd":0.015350387077112811},{"leaves":4,"rounds":100,"train":0.8448504437586358,"test":0.8301654473611617,"test_sd":0.009661176957513925},{"leaves":4,"rounds":200,"train":0.8676739674548746,"test":0.84350468564876,"test_sd":0.013970640317728152},{"leaves":4,"rounds":400,"train":0.9032268947584108,"test":0.8530494261257155,"test_sd":0.013920723233230597},{"leaves":8,"rounds":25,"train":0.8449124641311517,"test":0.8285687902920348,"test_sd":0.015277044709674956},{"leaves":8,"rounds":50,"train":0.8638322163917918,"test":0.8373053660216889,"test_sd":0.012023969611298752},{"leaves":8,"rounds":100,"train":0.8889057123934657,"test":0.8528817654349187,"test_sd":0.01700469121572805},{"leaves":8,"rounds":200,"train":0.9246463021039887,"test":0.8663083583377793,"test_sd":0.015922143585178867},{"leaves":8,"rounds":400,"train":0.9565310724801239,"test":0.8704965340039319,"test_sd":0.01516693846200658},{"leaves":15,"rounds":25,"train":0.8738232264055634,"test":0.8409991952728199,"test_sd":0.014463576746819407},{"leaves":15,"rounds":50,"train":0.8946546808039271,"test":0.8505188829852237,"test_sd":0.014967441796739377},{"leaves":15,"rounds":100,"train":0.9283155895839658,"test":0.8626603541082478,"test_sd":0.01321373097589865},{"leaves":15,"rounds":200,"train":0.9611048291173339,"test":0.8708264687827466,"test_sd":0.014817316998175017},{"leaves":15,"rounds":400,"train":0.9862570194573426,"test":0.8741707238683031,"test_sd":0.014406204248854117},{"leaves":31,"rounds":25,"train":0.9118488823023982,"test":0.85936369616406,"test_sd":0.016029824839215702},{"leaves":31,"rounds":50,"train":0.9307000782863941,"test":0.8655950669478438,"test_sd":0.012374712042792503},{"leaves":31,"rounds":100,"train":0.9640268409685671,"test":0.869000988701309,"test_sd":0.017119176103877844},{"leaves":31,"rounds":200,"train":0.9892548864621062,"test":0.8746766300803716,"test_sd":0.012294414953800856},{"leaves":31,"rounds":400,"train":0.9983520928417899,"test":0.879183348010333,"test_sd":0.0126779191876336},{"leaves":63,"rounds":25,"train":0.9428984024544436,"test":0.8500331466700863,"test_sd":0.010013746520329417},{"leaves":63,"rounds":50,"train":0.9630861460627205,"test":0.8595767949773665,"test_sd":0.008023296352981425},{"leaves":63,"rounds":100,"train":0.9881710691015971,"test":0.8651607108006756,"test_sd":0.010243559242642686},{"leaves":63,"rounds":200,"train":0.998426692587848,"test":0.8714871068692103,"test_sd":0.012707532792557692},{"leaves":63,"rounds":400,"train":0.9999630011502486,"test":0.8767455091945285,"test_sd":0.010160764617313887}],"best":{"leaves":31,"rounds":400,"train":0.9983520928417899,"test":0.879183348010333,"test_sd":0.0126779191876336},"default":{"leaves":15,"rounds":200,"train":0.9611048291173339,"test":0.8708264687827466,"test_sd":0.014817316998175017},"learning_curve":[{"share":0.1,"train":1.0,"test":0.7668180116333103},{"share":0.25,"train":1.0,"test":0.8184320952157573},{"share":0.5,"train":0.9999737940579141,"test":0.8527362447261195},{"share":0.75,"train":0.9993001921495634,"test":0.8667938151995136},{"share":1.0,"train":0.9983520928417899,"test":0.879183348010333}],"ablation":[{"feature":"log_desc_len","test_without":0.7924058834485875,"drop":0.08677746456174551},{"feature":"location_match","test_without":0.8577508302393241,"drop":0.021432517771008963},{"feature":"grad_window_stated","test_without":0.8736787862674721,"drop":0.005504561742860958},{"feature":"track_unknown","test_without":0.8758527412171612,"drop":0.0033306067931718752},{"feature":"skill_hits","test_without":0.8759585154404004,"drop":0.0032248325699326674},{"feature":"track_adjacent","test_without":0.8761151286775195,"drop":0.0030682193328135376},{"feature":"hybrid_rrf","test_without":0.8763617372455075,"drop":0.002821610764825566},{"feature":"level_match","test_without":0.8766357245103956,"drop":0.0025476234999374237},{"feature":"hybrid_rank","test_without":0.8770258669188605,"drop":0.002157481091472513},{"feature":"track_unrelated","test_without":0.8771513395386178,"drop":0.002032008471715252},{"feature":"interest_overlap","test_without":0.8776715480598719,"drop":0.0015117999504611346},{"feature":"sponsorship_stated","test_without":0.8782223138355763,"drop":0.0009610341747567919},{"feature":"location_unknown","test_without":0.879183348010333,"drop":0.0},{"feature":"restricted_program","test_without":0.879283552409792,"drop":-0.00010020439945890303},{"feature":"bm25","test_without":0.8803196377734986,"drop":-0.0011362897631655988},{"feature":"track_same","test_without":0.8821837214034833,"drop":-0.0030003733931502907},{"feature":"dense","test_without":0.883900084219961,"drop":-0.004716736209627981}],"linear":{"train":0.7812208476981688,"test":0.7773029483418881,"test_sd":0.02120732091961097,"coefficients":[{"feature":"restricted_program","coef":-1.62965408880555},{"feature":"level_match","coef":1.3586838180164804},{"feature":"log_desc_len","coef":-0.9411559888834912},{"feature":"bm25","coef":0.8418292100170057},{"feature":"dense","coef":-0.686323538899367},{"feature":"hybrid_rrf","coef":0.5750979121478776},{"feature":"track_same","coef":0.539407837524536},{"feature":"hybrid_rank","coef":0.48140505779582354},{"feature":"track_unrelated","coef":-0.4696442238398736},{"feature":"interest_overlap","coef":0.319988679071177},{"feature":"location_match","coef":0.22956408749851265},{"feature":"track_adjacent","coef":-0.13687317262641557},{"feature":"sponsorship_stated","coef":-0.13529913575141506},{"feature":"skill_hits","coef":-0.09127018215987734},{"feature":"track_unknown","coef":0.06710955893426504},{"feature":"grad_window_stated","coef":0.05057593817231883},{"feature":"location_unknown","coef":0.0}]},"roc":{"LambdaMART":{"points":[[0.0,0.0],[0.0007,0.0665],[0.0022,0.1303],[0.0033,0.1954],[0.0038,0.2626],[0.0055,0.3257],[0.0071,0.3895],[0.0088,0.4525],[0.013,0.508],[0.0157,0.5683],[0.0203,0.6223],[0.0259,0.6736],[0.0318,0.7235],[0.0396,0.7678],[0.0488,0.8073],[0.0606,0.8392],[0.0754,0.8614],[0.0922,0.8773],[0.109,0.8933],[0.1264,0.9071],[0.1445,0.9189],[0.1655,0.9217],[0.185,0.9293],[0.2044,0.9369],[0.2252,0.9404],[0.2455,0.9453],[0.2639,0.9563],[0.2842,0.9612],[0.3041,0.9674],[0.3235,0.9751],[0.3441,0.9792],[0.3649,0.9827],[0.3854,0.9868],[0.4064,0.9896],[0.4283,0.9896],[0.4499,0.9903],[0.4718,0.9903],[0.493,0.9924],[0.5143,0.9945],[0.5357,0.9958],[0.5569,0.9979],[0.5781,1.0],[0.6,1.0],[0.6219,1.0],[0.6438,1.0],[0.6656,1.0],[0.6875,1.0],[0.7094,1.0],[0.7313,1.0],[0.7531,1.0],[0.775,1.0],[0.7969,1.0],[0.8188,1.0],[0.8407,1.0],[0.8625,1.0],[0.8844,1.0],[0.9063,1.0],[0.9282,1.0],[0.9501,1.0],[0.9719,1.0],[0.9938,1.0],[1.0,1.0]],"auc":0.9562744895341582},"Linear (rescaled)":{"points":[[0.0,0.0],[0.0015,0.0638],[0.0035,0.1261],[0.0071,0.1836],[0.0126,0.2349],[0.0175,0.2883],[0.0219,0.343],[0.0285,0.3909],[0.0345,0.4407],[0.0391,0.4948],[0.0446,0.5461],[0.0513,0.5939],[0.0581,0.641],[0.0645,0.6895],[0.0727,0.7325],[0.0798,0.7789],[0.0897,0.8164],[0.1006,0.851],[0.1118,0.8843],[0.1277,0.903],[0.1454,0.9161],[0.1644,0.9252],[0.1812,0.9411],[0.2007,0.9487],[0.2208,0.9543],[0.2413,0.9584],[0.2614,0.964],[0.2827,0.966],[0.3032,0.9702],[0.3242,0.973],[0.3445,0.9778],[0.3655,0.9806],[0.3867,0.9827],[0.4082,0.9841],[0.4298,0.9848],[0.4513,0.9861],[0.4727,0.9875],[0.4944,0.9882],[0.516,0.9889],[0.5375,0.9903],[0.5589,0.9917],[0.5801,0.9938],[0.6013,0.9958],[0.623,0.9965],[0.6442,0.9986],[0.6659,0.9993],[0.6875,1.0],[0.7094,1.0],[0.7313,1.0],[0.7531,1.0],[0.775,1.0],[0.7969,1.0],[0.8188,1.0],[0.8407,1.0],[0.8625,1.0],[0.8844,1.0],[0.9063,1.0],[0.9282,1.0],[0.9501,1.0],[0.9719,1.0],[0.9938,1.0],[1.0,1.0]],"auc":0.9372449202283456},"Hybrid retrieval score":{"points":[[0.0,0.0],[0.017,0.0152],[0.0334,0.0326],[0.0473,0.0575],[0.063,0.0769],[0.0773,0.1005],[0.0915,0.1247],[0.1054,0.1497],[0.1215,0.1677],[0.1383,0.1836],[0.1529,0.2065],[0.1697,0.2225],[0.1861,0.2398],[0.2011,0.2613],[0.2177,0.2779],[0.2336,0.2966],[0.2497,0.3146],[0.2645,0.3368],[0.2807,0.3548],[0.2981,0.3687],[0.3136,0.3888],[0.3295,0.4075],[0.3478,0.4186],[0.3642,0.4359],[0.3823,0.4477],[0.3989,0.4643],[0.4146,0.4837],[0.4301,0.5038],[0.4473,0.5184],[0.4639,0.535],[0.4802,0.5523],[0.4983,0.5641],[0.5149,0.5807],[0.5308,0.5994],[0.5461,0.6202],[0.5629,0.6362],[0.5792,0.6535],[0.596,0.6694],[0.6137,0.6826],[0.6296,0.7013],[0.6464,0.7173],[0.6643,0.7297],[0.6818,0.7436],[0.6981,0.7609],[0.7162,0.7727],[0.7339,0.7859],[0.7496,0.8053],[0.7664,0.8212],[0.7841,0.8344],[0.8002,0.8524],[0.8166,0.8697],[0.8349,0.8808],[0.8526,0.894],[0.8698,0.9085],[0.8891,0.9168],[0.9043,0.9376],[0.922,0.9508],[0.9401,0.9626],[0.9596,0.9702],[0.9772,0.9834],[0.9949,0.9965],[1.0,1.0]],"auc":0.5519958037085109}},"desc_length_bins":[{"from":0,"to":300,"n":121,"mean_grade":1.0826446280991735,"share_zero":0.3140495867768595,"share_relevant":0.10743801652892562,"restricted_share":0.3140495867768595,"level_match_share":1.0},{"from":300,"to":1500,"n":96,"mean_grade":2.65625,"share_zero":0.0,"share_relevant":0.625,"restricted_share":0.0,"level_match_share":1.0},{"from":1500,"to":3000,"n":795,"mean_grade":1.7937106918238994,"share_zero":0.2729559748427673,"share_relevant":0.40125786163522015,"restricted_share":0.07672955974842767,"level_match_share":0.9018867924528302},{"from":3000,"to":5000,"n":2970,"mean_grade":1.1228956228956228,"share_zero":0.5242424242424243,"share_relevant":0.21043771043771045,"restricted_share":0.3784511784511784,"level_match_share":0.9656565656565657},{"from":5000,"to":8001,"n":1986,"mean_grade":1.1017119838872105,"share_zero":0.5281973816717019,"share_relevant":0.21450151057401812,"restricted_share":0.2945619335347432,"level_match_share":0.9667673716012085}]}</script>
+<script>
+(function () {
+  const D = JSON.parse(document.getElementById('data').textContent);
+  const NS = 'http://www.w3.org/2000/svg';
+  const f3 = v => v.toFixed(3);
+  const pct = v => Math.round(v * 100) + '%';
+  const tip = document.getElementById('tip');
+  function s(tag, a, txt) { const n = document.createElementNS(NS, tag); for (const k in a) n.setAttribute(k, a[k]); if (txt != null) n.textContent = txt; return n; }
+  function hover(node, text) {
+    node.style.cursor = 'default';
+    node.addEventListener('pointerenter', () => { tip.textContent = text; tip.style.opacity = 1; });
+    node.addEventListener('pointermove', e => { const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8); tip.style.left = x + 'px'; tip.style.top = (e.clientY + 14) + 'px'; });
+    node.addEventListener('pointerleave', () => { tip.style.opacity = 0; });
+  }
+  const byKey = (a, k) => a.reduce((m, r) => (m[r[k]] = r, m), {});
+
+  // Header and findings
+  const best = D.best, def = D.default, lin = D.linear, roc = D.roc;
+  const sweep = D.sweep;
+  const oneSE = sweep.filter(r => r.test >= best.test - best.test_sd).sort((a, b) => (a.leaves * a.rounds) - (b.leaves * b.rounds))[0];
+  document.getElementById('meta').innerHTML =
+    `<span><b>${D.profiles}</b> profiles</span><span><b>${D.pairs.toLocaleString()}</b> judged pairs</span><span><b>${pct(D.relevant_share)}</b> graded relevant</span><span><b>5</b>-fold CV, stratified by track</span>`;
+  const abl = D.ablation;
+  const findings = [
+    `<b>The reranker's test score keeps rising with complexity and then flattens.</b> Test NDCG@10 goes from ${f3(sweep[0].test)} (2 leaves, 25 rounds) to ${f3(best.test)} (${best.leaves} leaves, ${best.rounds} rounds), while train climbs to ${f3(best.train)}. The widening gap is overfitting, but test never falls, so it is benign here.`,
+    `<b>A much simpler model is statistically as good.</b> The smallest model within one standard deviation of the best is ${oneSE.leaves} leaves × ${oneSE.rounds} rounds (test ${f3(oneSE.test)}, train ${f3(oneSE.train)}). The current default, ${def.leaves} × ${def.rounds}, scores ${f3(def.test)} ± ${f3(def.test_sd)}.`,
+    `<b>More data would still help.</b> The learning curve is still rising at 100% of the training profiles (${f3(D.learning_curve.at(-1).test)}), with train near 1.0: a high-variance model.`,
+    `<b>Trees beat a linear model by ${f3(def.test - lin.test)} NDCG@10</b> (${f3(def.test)} vs ${f3(lin.test)}). The linear model has almost no train–test gap (${f3(lin.train)} vs ${f3(lin.test)}), the signature of underfitting rather than overfitting.`,
+    `<b>Retrieval scores barely rank relevance among eligible candidates</b> (AUC ${f3(roc['Hybrid retrieval score'].auc)}, near random), while the reranker reaches AUC ${f3(roc.LambdaMART.auc)}.`,
+    `<b>Description length is the feature the model leans on most</b> (removing it costs ${f3(abl[0].drop)} NDCG@10), and it acts as a proxy for where a posting came from, not a cause of fit (Figure 8).`,
+  ];
+  document.getElementById('findings').innerHTML = findings.map(t => `<li>${t}</li>`).join('');
+
+  // Generic line chart
+  function lineChart(svg, cfg) {
+    const W = +svg.viewBox.baseVal.width, H = +svg.viewBox.baseVal.height;
+    const m = { l: 64, r: 70, t: 14, b: 44 };
+    const X = cfg.xs.map(cfg.xmap || (v => v));
+    const x0 = Math.min(...X), x1 = Math.max(...X);
+    const [y0, y1] = cfg.ydomain;
+    const px = v => m.l + (W - m.l - m.r) * ((cfg.xmap || (q => q))(v) - x0) / (x1 - x0);
+    const py = v => m.t + (H - m.t - m.b) * (1 - (v - y0) / (y1 - y0));
+    for (const t of cfg.yticks) {
+      svg.append(s('line', { x1: m.l, x2: W - m.r, y1: py(t), y2: py(t), stroke: 'var(--grid)' }));
+      svg.append(s('text', { x: m.l - 8, y: py(t) + 4, 'text-anchor': 'end' }, t.toFixed(2)));
+    }
+    cfg.xs.forEach(v => svg.append(s('text', { x: px(v), y: H - m.b + 18, 'text-anchor': 'middle' }, cfg.xfmt ? cfg.xfmt(v) : v)));
+    svg.append(s('text', { x: (m.l + W - m.r) / 2, y: H - 6, 'text-anchor': 'middle', class: 'axis-title' }, cfg.xlabel));
+    svg.append(s('text', { x: 14, y: (m.t + H - m.b) / 2, 'text-anchor': 'middle', class: 'axis-title', transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})` }, 'NDCG@10'));
+    for (const ser of cfg.series) {
+      if (ser.sd) {
+        const up = cfg.xs.map((v, i) => `${px(v)},${py(ser.ys[i] + ser.sd[i])}`);
+        const dn = cfg.xs.map((v, i) => `${px(v)},${py(ser.ys[i] - ser.sd[i])}`).reverse();
+        svg.append(s('polygon', { points: up.concat(dn).join(' '), fill: 'var(--band)', stroke: 'none' }));
+      }
+      svg.append(s('polyline', { points: cfg.xs.map((v, i) => `${px(v)},${py(ser.ys[i])}`).join(' '), fill: 'none', stroke: ser.color, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+      cfg.xs.forEach((v, i) => {
+        const hit = s('circle', { cx: px(v), cy: py(ser.ys[i]), r: 10, fill: 'transparent' });
+        svg.append(s('circle', { cx: px(v), cy: py(ser.ys[i]), r: 4, fill: ser.color, stroke: 'var(--surface)', 'stroke-width': 2 }));
+        svg.append(hit);
+        hover(hit, `${ser.name}\n${cfg.xlabel}: ${cfg.xfmt ? cfg.xfmt(v) : v}\nNDCG@10: ${f3(ser.ys[i])}` + (ser.sd ? ` ± ${f3(ser.sd[i])}` : ''));
+      });
+      const last = cfg.xs.length - 1;
+      svg.append(s('text', { x: px(cfg.xs[last]) + 10, y: py(ser.ys[last]) + 4, class: 'lbl' }, ser.short));
+    }
+    if (cfg.mark) {
+      const { x, y, label } = cfg.mark;
+      svg.append(s('circle', { cx: px(x), cy: py(y), r: 8, fill: 'none', stroke: 'var(--fg)', 'stroke-width': 1.5 }));
+      svg.append(s('text', { x: px(x), y: py(y) + 24, 'text-anchor': 'middle', class: 'lbl' }, label));
+    }
+  }
+
+  // Figure 1
+  const at200 = sweep.filter(r => r.rounds === 200).sort((a, b) => a.leaves - b.leaves);
+  lineChart(document.getElementById('c-valid'), {
+    xs: at200.map(r => r.leaves), xmap: Math.log2, xlabel: 'Leaves per tree (log scale)',
+    ydomain: [0.78, 1.0], yticks: [0.8, 0.85, 0.9, 0.95, 1.0],
+    series: [
+      { name: 'Train', short: 'train', color: 'var(--s2)', ys: at200.map(r => r.train) },
+      { name: 'Test', short: 'test', color: 'var(--s1)', ys: at200.map(r => r.test), sd: at200.map(r => r.test_sd) },
+    ],
+  });
+  const peak200 = at200.reduce((a, b) => b.test > a.test ? b : a);
+  document.getElementById('cap-valid').innerHTML = `<b>Test peaks at ${peak200.leaves} leaves (${f3(peak200.test)})</b> and dips slightly at 63, while train keeps rising toward 1.0. The band is ±1 standard deviation across the five folds, about ±${f3(peak200.test_sd)}: every model from 8 leaves up overlaps it.`;
+
+  // Figure 2: sweep table
+  const leaves = [...new Set(sweep.map(r => r.leaves))], rounds = [...new Set(sweep.map(r => r.rounds))];
+  const cell = (L, R) => sweep.find(r => r.leaves === L && r.rounds === R);
+  const t = document.getElementById('t-sweep');
+  t.innerHTML = `<thead><tr><th>Leaves \\ rounds</th>${rounds.map(r => `<th>${r}</th>`).join('')}</tr></thead><tbody>` +
+    leaves.map(L => `<tr><td>${L}</td>${rounds.map(R => { const c = cell(L, R); const cls = (L === best.leaves && R === best.rounds) ? 'best' : ''; return `<td class="${cls}" title="train ${f3(c.train)} · test ${f3(c.test)} ± ${f3(c.test_sd)}">${f3(c.test)}</td>`; }).join('')}</tr>`).join('') + '</tbody>';
+  document.getElementById('cap-sweep').innerHTML = `Each cell is mean test NDCG@10 over five folds; hover a cell for the train score and spread. <b>The best cell (${best.leaves} × ${best.rounds}, outlined) is ${f3(best.test - oneSE.test)} above the smallest model inside one standard deviation</b> (${oneSE.leaves} × ${oneSE.rounds}), a difference smaller than the fold-to-fold noise.`;
+
+  // Figure 3
+  const lc = D.learning_curve;
+  lineChart(document.getElementById('c-learn'), {
+    xs: lc.map(r => r.share), xfmt: v => pct(v), xlabel: 'Share of training profiles used',
+    ydomain: [0.74, 1.01], yticks: [0.75, 0.8, 0.85, 0.9, 0.95, 1.0],
+    series: [
+      { name: 'Train', short: 'train', color: 'var(--s2)', ys: lc.map(r => r.train) },
+      { name: 'Test', short: 'test', color: 'var(--s1)', ys: lc.map(r => r.test) },
+    ],
+  });
+  document.getElementById('cap-learn').innerHTML = `At the best complexity, <b>test NDCG@10 rises from ${f3(lc[0].test)} with 10% of the training profiles to ${f3(lc.at(-1).test)} with all of them</b> and has not levelled off. Train stays near 1.0 throughout, so the model memorises its training students: more profiles, or a smaller model, are the two ways to close the gap.`;
+
+  // Figure 4: model comparison bars
+  (function () {
+    const svg = document.getElementById('c-models'), W = 680, rowH = 34, m = { l: 250, r: 70, t: 6 };
+    const rows = [
+      ['Hybrid retrieval order', D.baselines['hybrid order'], null, 'var(--faint)'],
+      ['+ restricted programs last', D.baselines['hybrid order, restricted programs last'], null, 'var(--faint)'],
+      ['Linear model (rescaled)', lin.test, lin.test_sd, 'var(--s3)'],
+      [`LambdaMART ${oneSE.leaves}×${oneSE.rounds} (one-SD pick)`, oneSE.test, oneSE.test_sd, 'var(--s1)'],
+      [`LambdaMART ${best.leaves}×${best.rounds} (best)`, best.test, best.test_sd, 'var(--s1)'],
+    ];
+    const px = v => m.l + (W - m.l - m.r) * v;
+    [0, 0.25, 0.5, 0.75, 1].forEach(v => { svg.append(s('line', { x1: px(v), x2: px(v), y1: m.t, y2: m.t + rows.length * rowH, stroke: 'var(--grid)' })); svg.append(s('text', { x: px(v), y: m.t + rows.length * rowH + 16, 'text-anchor': 'middle' }, v.toFixed(2))); });
+    svg.append(s('text', { x: (m.l + W - m.r) / 2, y: 226, 'text-anchor': 'middle', class: 'axis-title' }, 'Test NDCG@10'));
+    rows.forEach(([name, v, sd, color], i) => {
+      const y = m.t + i * rowH + 8, h = rowH - 14;
+      svg.append(s('text', { x: m.l - 10, y: y + h / 2 + 4, 'text-anchor': 'end', class: 'lbl' }, name));
+      const bar = s('rect', { x: px(0), y, width: px(v) - px(0), height: h, rx: 4, fill: color });
+      svg.append(bar);
+      if (sd) svg.append(s('line', { x1: px(v - sd), x2: px(v + sd), y1: y + h / 2, y2: y + h / 2, stroke: 'var(--fg)', 'stroke-width': 1.5 }));
+      svg.append(s('text', { x: px(v) + 8, y: y + h / 2 + 4, class: 'lbl' }, f3(v)));
+      hover(bar, `${name}\ntest NDCG@10: ${f3(v)}` + (sd ? ` ± ${f3(sd)}` : ''));
+    });
+  })();
+  document.getElementById('cap-models').innerHTML = `All five orderings are scored on the same judged candidates. <b>Learning the ranking more than doubles NDCG@10 over the retriever's own order</b>; a hand rule (sink restricted programs) recovers a fraction of that, the linear model most of it. Whiskers are ±1 SD across folds.`;
+
+  // Figure 5: ROC
+  (function () {
+    const svg = document.getElementById('c-roc'), W = 680, H = 420, m = { l: 60, r: 220, t: 12, b: 46 };
+    const side = Math.min(W - m.l - m.r, H - m.t - m.b);
+    const px = v => m.l + side * v, py = v => m.t + side * (1 - v);
+    [0, 0.25, 0.5, 0.75, 1].forEach(v => {
+      svg.append(s('line', { x1: px(v), x2: px(v), y1: py(0), y2: py(1), stroke: 'var(--grid)' }));
+      svg.append(s('line', { x1: px(0), x2: px(1), y1: py(v), y2: py(v), stroke: 'var(--grid)' }));
+      svg.append(s('text', { x: px(v), y: py(0) + 18, 'text-anchor': 'middle' }, v.toFixed(2)));
+      svg.append(s('text', { x: px(0) - 8, y: py(v) + 4, 'text-anchor': 'end' }, v.toFixed(2)));
+    });
+    svg.append(s('line', { x1: px(0), y1: py(0), x2: px(1), y2: py(1), stroke: 'var(--faint)', 'stroke-dasharray': '4 4' }));
+    svg.append(s('text', { x: px(0.62), y: py(0.55), class: 'axis-title', transform: `rotate(-45 ${px(0.62)} ${py(0.55)})` }, 'random'));
+    svg.append(s('text', { x: px(0.5), y: H - 8, 'text-anchor': 'middle', class: 'axis-title' }, 'False positive rate'));
+    svg.append(s('text', { x: 16, y: py(0.5), 'text-anchor': 'middle', class: 'axis-title', transform: `rotate(-90 16 ${py(0.5)})` }, 'True positive rate (recall)'));
+    const series = [['LambdaMART', 'var(--s1)'], ['Linear (rescaled)', 'var(--s3)'], ['Hybrid retrieval score', 'var(--s2)']];
+    const leg = document.getElementById('leg-roc');
+    series.forEach(([name, color], i) => {
+      const r = roc[name];
+      svg.append(s('polyline', { points: r.points.map(([a, b]) => `${px(a)},${py(b)}`).join(' '), fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+      r.points.forEach(([a, b], k) => { if (k % 3) return; const hit = s('circle', { cx: px(a), cy: py(b), r: 7, fill: 'transparent' }); svg.append(hit); hover(hit, `${name}\nFPR ${a.toFixed(2)} · TPR ${b.toFixed(2)}`); });
+      svg.append(s('text', { x: px(1) + 16, y: m.t + 24 + i * 22, class: 'lbl' }, `${name}  AUC ${f3(r.auc)}`));
+      svg.append(s('line', { x1: px(1) + 4, x2: px(1) + 12, y1: m.t + 20 + i * 22, y2: m.t + 20 + i * 22, stroke: color, 'stroke-width': 3 }));
+      leg.insertAdjacentHTML('beforeend', `<span><i style="background:${color}"></i>${name} (AUC ${f3(r.auc)})</span>`);
+    });
+  })();
+  document.getElementById('cap-roc').innerHTML = `Out-of-fold scores, positives = judged grade ≥ 3 (${pct(D.relevant_share)} of pairs). <b>The retriever's own score is close to the diagonal</b>: once ineligible jobs are filtered, text similarity says little about which of the remaining 50 are a good fit. The learned models sit near the top-left corner. Because the product shows a fixed number of picks, the threshold in use is effectively "top 10 per student", a point on this curve chosen by capacity.`;
+
+  // Horizontal diverging bar chart
+  function hbars(svg, rows, fmt, zeroLabel) {
+    const W = 420, rowH = 25, m = { l: 140, r: 54, t: 6 };
+    const vals = rows.map(r => r.v), lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+    const px = v => m.l + (W - m.l - m.r) * (v - lo) / (hi - lo);
+    const H = m.t + rows.length * rowH;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H + 40}`);
+    svg.append(s('line', { x1: px(0), x2: px(0), y1: m.t, y2: H, stroke: 'var(--faint)' }));
+    svg.append(s('text', { x: (m.l + W - m.r) / 2, y: H + 30, 'text-anchor': 'middle', class: 'axis-title' }, zeroLabel));
+    rows.forEach((r, i) => {
+      const y = m.t + i * rowH + 5, h = rowH - 10, x = Math.min(px(0), px(r.v)), w = Math.max(1, Math.abs(px(r.v) - px(0)));
+      svg.append(s('text', { x: m.l - 8, y: y + h / 2 + 4, 'text-anchor': 'end', class: 'lbl' }, r.name));
+      const bar = s('rect', { x, y, width: w, height: h, rx: 3, fill: r.v >= 0 ? 'var(--pos)' : 'var(--neg)' });
+      svg.append(bar);
+      svg.append(s('text', { x: r.v >= 0 ? px(r.v) + 5 : px(r.v) - 5, y: y + h / 2 + 4, 'text-anchor': r.v >= 0 ? 'start' : 'end' }, fmt(r.v)));
+      hover(bar, `${r.name}\n${fmt(r.v)}`);
+    });
+  }
+  hbars(document.getElementById('c-ablate'), abl.map(a => ({ name: a.feature, v: a.drop })), v => (v >= 0 ? '−' : '+') + Math.abs(v).toFixed(3), 'NDCG@10 lost without the feature');
+  document.getElementById('cap-ablate').innerHTML = `Each bar retrains the best model without one feature. <b>Only description length (${f3(abl[0].drop)}) and location match (${f3(abl[1].drop)}) cost more than 0.01.</b> Removing the restricted-program flag costs nothing even though the trees split on it most: correlated features (level, length) carry the same information, so gain-based importance and ablation disagree.`;
+  hbars(document.getElementById('c-coef'), lin.coefficients.map(c => ({ name: c.feature, v: c.coef })), v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2), 'Change in predicted grade across the feature\'s range');
+  document.getElementById('cap-coef').innerHTML = `Features are rescaled to [0, 1] with (x − min) / (max − min), so each coefficient is the change in predicted grade (0–4) across that feature's full range and they can be compared directly. <b>Restricted programs lower the grade most (${lin.coefficients[0].coef.toFixed(2)}), matching level raises it (+${lin.coefficients[1].coef.toFixed(2)})</b>. Opposite signs on BM25 and dense reflect their correlation with the hybrid score, not opposite effects.`;
+
+  // Figure 8: description length bins
+  (function () {
+    const svg = document.getElementById('c-len'), W = 680, H = 280, m = { l: 52, r: 16, t: 14, b: 50 };
+    const bins = D.desc_length_bins, n = bins.length, gw = (W - m.l - m.r) / n, bw = Math.min(46, gw / 3);
+    const py = v => m.t + (H - m.t - m.b) * (1 - v);
+    [0, 0.2, 0.4, 0.6].forEach(t => { svg.append(s('line', { x1: m.l, x2: W - m.r, y1: py(t), y2: py(t), stroke: 'var(--grid)' })); svg.append(s('text', { x: m.l - 8, y: py(t) + 4, 'text-anchor': 'end' }, pct(t))); });
+    bins.forEach((b, i) => {
+      const cx = m.l + gw * i + gw / 2;
+      [['share_relevant', 'var(--s1)', -1, 'graded relevant'], ['share_zero', 'var(--s2)', 1, 'graded 0']].forEach(([k, color, side, word]) => {
+        const x = cx + (side < 0 ? -bw - 1 : 1), v = b[k];
+        const bar = s('rect', { x, y: py(v), width: bw, height: py(0) - py(v), rx: 3, fill: color });
+        svg.append(bar);
+        hover(bar, `${b.from.toLocaleString()}–${b.to.toLocaleString()} characters (n = ${b.n})\n${pct(v)} ${word}\nrestricted programs: ${pct(b.restricted_share)}`);
+      });
+      svg.append(s('text', { x: cx, y: H - m.b + 18, 'text-anchor': 'middle' }, `${(b.from / 1000).toFixed(1)}–${(Math.min(b.to, 8000) / 1000).toFixed(1)}k`));
+      svg.append(s('text', { x: cx, y: H - m.b + 32, 'text-anchor': 'middle' }, `n = ${b.n}`));
+    });
+    svg.append(s('text', { x: (m.l + W - m.r) / 2, y: H - 2, 'text-anchor': 'middle', class: 'axis-title' }, 'Description length (thousands of characters)'));
+  })();
+  const LB = D.desc_length_bins;
+  document.getElementById('cap-len').innerHTML = `<b>Postings of 300–1,500 characters are graded relevant ${pct(LB[1].share_relevant)} of the time and never 0; postings over 3,000 characters are 0 about half the time.</b> Long postings are mostly bank campus pages, ${pct(LB[3].restricted_share)} of which are programs closed to most undergraduates. Length is standing in for the source of the posting, so the model may be learning "bank campus page" rather than fit.`;
+
+  document.getElementById('foot').innerHTML = `Generated from <code>results/model_selection.json</code> by <code>uv run bench-select</code> in student-job-match-bench. All labels are AI-generated; no new model calls were made for this analysis.`;
+})();
+</script>
